@@ -1,0 +1,9 @@
+PomoPal
+Copyright (c) 2026 JulieFluff. All rights reserved.
+
+This code, its design, characters and artwork are the property of the copyright
+holder. They are published here only so the PomoPal web page can be hosted.
+
+No permission is granted to copy, modify, reuse, redistribute or create works
+based on any part of it, in whole or in part, without prior written permission
+from the copyright holder.

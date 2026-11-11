@@ -1,0 +1,48 @@
+<!doctype html>
+<!-- PomoPal. Copyright (c) 2026 JulieFluff. All rights reserved. Not for reuse; see LICENSE.txt. -->
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'">
+  <title>PomoPal</title><link rel="stylesheet" href="renderer/styles.css"><link rel="stylesheet" href="web.css">
+</head>
+<body class="web">
+<!-- The <main> and <dialog> below are the Mac app's screens from ../renderer/index.html, copied unchanged (a test keeps them identical). -->
+<main class="app-shell" aria-label="PomoPal timer">
+  <header class="titlebar full-only"><div><p class="eyebrow">YOUR TINY FOCUS FRIEND</p><h1>PomoPal</h1></div><div class="icon-actions"><button id="theme-toggle" class="icon-button" type="button" aria-label="Switch to dark mode" aria-pressed="false">☾</button><button id="mute-toggle" class="icon-button" type="button" aria-label="Mute sounds" aria-pressed="false">♪</button><button id="compact-toggle" class="icon-button" type="button" aria-label="Switch to mini timer">↘</button></div></header>
+  <section class="timer-card">
+    <button id="expand-toggle" class="mini-only expand-button" type="button" aria-label="Return to full timer">↗</button>
+    <button id="mascot" class="mascot" type="button" data-active="tomato" aria-label="Change PomoPal friend" title="Change PomoPal friend">
+      <svg viewBox="0 0 180 150" role="img" aria-hidden="true">
+        <g id="mascot-tomato" class="mascot-option tomato"><path class="fruit" d="M31 78C31 43 55 25 90 25s59 18 59 53c0 38-25 61-59 61S31 116 31 78Z"/><path class="leaf" d="M89 30 70 18l5 18-21-5 15 14h42l15-14-21 5 5-18Z"/><g class="eyes"><circle cx="70" cy="76" r="5"/><circle cx="110" cy="76" r="5"/></g><path class="smile" d="M75 94q15 15 30 0"/><g class="cheeks"><ellipse cx="56" cy="91" rx="9" ry="5"/><ellipse cx="124" cy="91" rx="9" ry="5"/></g></g>
+        <g id="mascot-cat" class="mascot-option cat"><path class="cat-ear" d="M42 58 48 22 73 43M138 58l-6-36-25 21"/><ellipse class="animal-head cat-head" cx="90" cy="83" rx="58" ry="49"/><path class="ear-inner" d="m49 46 3-16 12 17m67-1-3-16-12 17"/><g class="eyes"><circle cx="69" cy="79" r="5"/><circle cx="111" cy="79" r="5"/></g><path class="nose" d="m90 91-6-4h12Z"/><path class="smile" d="M90 92q-2 12-13 9m13-9q2 12 13 9"/><path class="whiskers" d="M70 94 45 88m25 13-26 5m66-12 25-6m-25 13 26 5"/><g class="cheeks"><ellipse cx="55" cy="96" rx="9" ry="5"/><ellipse cx="125" cy="96" rx="9" ry="5"/></g></g>
+        <g id="mascot-dog" class="mascot-option dog"><ellipse class="dog-ear" cx="42" cy="72" rx="20" ry="36" transform="rotate(18 42 72)"/><ellipse class="dog-ear" cx="138" cy="72" rx="20" ry="36" transform="rotate(-18 138 72)"/><ellipse class="animal-head dog-head" cx="90" cy="82" rx="54" ry="50"/><path class="dog-spot" d="M60 40q27-18 34 9-8 26-35 24-13-17 1-33Z"/><ellipse class="muzzle" cx="90" cy="103" rx="25" ry="19"/><g class="eyes"><circle cx="69" cy="77" r="5"/><circle cx="111" cy="77" r="5"/></g><ellipse class="nose" cx="90" cy="95" rx="8" ry="6"/><path class="smile" d="M90 101q-2 11-13 9m13-9q2 11 13 9"/><g class="cheeks"><ellipse cx="54" cy="97" rx="8" ry="4"/><ellipse cx="126" cy="97" rx="8" ry="4"/></g></g>
+        <g id="mascot-hamster" class="mascot-option hamster"><circle class="hamster-ear" cx="51" cy="46" r="18"/><circle class="hamster-ear" cx="129" cy="46" r="18"/><circle class="ear-inner-circle" cx="51" cy="46" r="10"/><circle class="ear-inner-circle" cx="129" cy="46" r="10"/><ellipse class="animal-head hamster-head" cx="90" cy="86" rx="57" ry="51"/><ellipse class="hamster-muzzle" cx="78" cy="104" rx="20" ry="18"/><ellipse class="hamster-muzzle" cx="102" cy="104" rx="20" ry="18"/><g class="eyes"><circle cx="68" cy="78" r="5"/><circle cx="112" cy="78" r="5"/></g><path class="nose" d="m90 94-6-4h12Z"/><path class="smile" d="M90 96q-1 11-10 11m10-11q1 11 10 11"/><g class="cheeks"><circle cx="49" cy="98" r="11"/><circle cx="131" cy="98" r="11"/></g></g>
+        <g id="mascot-apple" class="mascot-option apple"><path class="fruit" d="M89 42c-17-16-55-5-58 35-4 50 27 67 59 59 32 8 63-9 59-59-3-40-41-51-58-35Z"/><path class="stem" d="M90 42q-2-20 12-30"/><path class="leaf" d="M101 22q21-18 34 1-19 17-34-1Z"/><g class="eyes"><circle cx="70" cy="78" r="5"/><circle cx="110" cy="78" r="5"/></g><path class="smile" d="M75 96q15 15 30 0"/><g class="cheeks"><ellipse cx="56" cy="94" rx="8" ry="4"/><ellipse cx="124" cy="94" rx="8" ry="4"/></g></g>
+        <g id="mascot-pear" class="mascot-option pear"><path class="fruit" d="M90 31c-15 0-22 14-24 32-2 19-31 28-31 52 0 25 24 31 55 31s55-6 55-31c0-24-29-33-31-52-2-18-9-32-24-32Z"/><path class="stem" d="M90 34q1-19 11-26"/><path class="leaf" d="M101 18q19-13 27 3-17 11-27-3Z"/><g class="eyes"><circle cx="71" cy="99" r="5"/><circle cx="109" cy="99" r="5"/></g><path class="smile" d="M76 116q14 13 28 0"/></g>
+
+      </svg>
+    </button>
+    <p id="status" class="status full-only" aria-live="polite" aria-atomic="true">Ready when you are</p><output id="time" class="time" aria-label="Time remaining">25:00</output>
+    <label class="intention-wrap full-only" for="intention"><span>What are you doing?</span><input id="intention" maxlength="120" placeholder="Work, exercise, chores—anything counts" autocomplete="off"></label>
+    <div id="timer-controls" class="controls"><button id="start-stop" class="primary" type="button">Start</button><button id="reset" class="secondary full-only" type="button">Reset &amp; clear</button></div>
+    <div id="completion-actions" class="completion-actions full-only" hidden>
+      <p><strong>Keep going or switch gears?</strong><span id="completed-task"></span></p>
+      <button id="continue-task" class="primary" type="button">Continue this activity</button>
+      <button id="new-task" class="secondary" type="button">Start something new</button>
+    </div>
+  </section>
+  <section class="settings full-only" aria-label="Timer settings">
+    <div class="duration-row" aria-label="Activity duration"><button type="button" data-minutes="5" aria-pressed="false">5</button><button type="button" data-minutes="15" aria-pressed="false">15</button><button type="button" data-minutes="25" class="selected" aria-pressed="true">25</button></div>
+    <form id="custom-duration" class="custom-duration"><label for="custom-minutes">Custom minutes</label><div><input id="custom-minutes" type="number" min="1" max="180" step="1" inputmode="numeric" required><button type="submit">Set custom time</button></div></form>
+    <label class="topmost"><input id="always-on-top" type="checkbox"> Keep above other windows</label>
+  </section>
+</main>
+<dialog id="settings-dialog" aria-labelledby="settings-title">
+  <form method="dialog" class="settings-panel">
+    <div class="settings-heading"><div><p class="eyebrow">PREFERENCES</p><h2 id="settings-title">Settings</h2></div><button id="close-settings" class="close-settings" type="submit" aria-label="Close settings">×</button></div>
+    <label class="sound-setting" for="finish-sound"><span>Finish sound</span><select id="finish-sound"><option value="random">Surprise me</option><option value="bright">Bright</option><option value="gentle">Gentle</option><option value="sparkle">Sparkle</option></select></label>
+  </form>
+</dialog>
+<script src="renderer/timer-model.js"></script><script src="renderer/finish-sounds.js"></script><script src="renderer/preferences.js"></script><script src="web-log.js"></script><script src="web-bridge.js"></script><script src="renderer/app.js"></script><script src="web-extras.js"></script>
+</body></html>
