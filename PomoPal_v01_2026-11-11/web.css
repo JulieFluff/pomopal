@@ -1,0 +1,29 @@
+/* PomoPal browser version: only what the browser needs on top of ../renderer/styles.css. */
+html { background: var(--paper); }
+body.web { overflow-y: auto; }
+body.web .app-shell { min-height: 0; padding-bottom: 24px; -webkit-app-region: no-drag; }
+body.web .titlebar, body.web .titlebar * { cursor: default; }
+/* Keep everything inside the card at the card's width, however long a task name is. */
+body.web .timer-card { grid-template-columns: minmax(0, 1fr); }
+
+/* Desktop-only controls that do nothing in a browser (the pop-out timer comes later). */
+body.web #compact-toggle, body.web .topmost { display: none; }
+
+/* Day job / Personal: same look as the duration buttons. */
+.web-category { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; width: 100%; margin-top: 8px; }
+.web-category button { min-height: 38px; background: var(--control); font-weight: 800; }
+.web-category button.selected { background: var(--selected); color: #382a2a; }
+.web-category button:disabled { opacity: .45; cursor: default; transform: none; }
+
+/* Recent tasks: one click fills "What are you doing?". */
+.web-recent { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; margin-top: 6px; }
+.web-recent[hidden] { display: none; }
+.web-recent button { max-width: 100%; min-height: 32px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--input); font-size: 13px; line-height: 1.3; text-align: left; white-space: normal; overflow-wrap: anywhere; }
+body.timer-complete .web-category, body.timer-complete .web-recent { display: none; }
+
+/* Saved count and quiet download links. */
+.web-log { margin-top: 12px; color: var(--muted); font-size: 12px; text-align: center; }
+.web-log p { margin: 2px 0; }
+.web-link { min-height: 32px; padding: 0 4px; background: none; color: var(--muted); font-weight: 700; }
+.web-link:hover:not(:disabled) { color: var(--ink); transform: none; }
+.web-link:disabled { opacity: .5; cursor: default; transform: none; }
