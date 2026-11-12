@@ -85,7 +85,8 @@
     taskList.replaceChildren(...log.recentTasks(sessions, state.category, 50).map((task) => el('option', { value: task })));
 
     const counts = Object.keys(log.CATEGORIES).map((key) => sessions.filter((s) => s.category === key).length);
-    count.textContent = `Saved in this browser: ${counts[0]} Day job · ${counts[1]} Personal`;
+    const where = sync?.status().signedIn ? 'Your log' : 'Saved in this browser';
+    count.textContent = `${where}: ${counts[0]} Day job · ${counts[1]} Personal`;
     downloadButtons.forEach((button, i) => { button.disabled = counts[i] === 0; });
   }
 
@@ -178,6 +179,93 @@
   }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
   // A saved "mini" from last time can't reopen a pop-out without a click, so start full.
   exitMini();
+
+  // Online saving (quiet text in the footer). Hidden until web-config.js has the Supabase details.
+  const online = el('div', { class: 'web-online' });
+  const onlineLine = el('p', { class: 'web-online-line', 'aria-live': 'polite' });
+  const onlineLinks = el('p', { class: 'web-links' });
+  const form = el('form', { class: 'web-login', hidden: '' });
+  const email = el('input', { type: 'email', autocomplete: 'username', placeholder: 'Email', 'aria-label': 'Email', required: '' });
+  const password = el('input', { type: 'password', autocomplete: 'current-password', placeholder: 'Password', 'aria-label': 'Password', required: '' });
+  const loginButton = el('button', { type: 'submit' }, 'Log in');
+  const formNote = el('p', { class: 'web-login-note', 'aria-live': 'polite' });
+  form.append(email, password, loginButton, formNote);
+  online.append(onlineLine, onlineLinks, form);
+  footer.append(online);
+
+  const subtle = window.crypto?.subtle;
+  const sync = window.PomoWebSync && subtle ? window.PomoWebSync.createSync({
+    config: window.PomoWebConfig || {},
+    storage: localStorage,
+    store,
+    fetch: (...args) => window.fetch(...args),
+    subtle,
+    randomBytes: (n) => window.crypto.getRandomValues(new Uint8Array(n)),
+    onChange: () => { renderOnline(); refresh(); },
+  }) : null;
+
+  const timeOf = (ms) => new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  function link(text, onClick) {
+    const button = el('button', { type: 'button', class: 'web-link' }, text);
+    button.addEventListener('click', onClick);
+    return button;
+  }
+
+  function renderOnline() {
+    const s = sync?.status();
+    online.hidden = !s?.configured;
+    if (!s?.configured) return;
+    if (s.signedIn) {
+      form.hidden = true;
+      onlineLine.textContent = s.error === 'offline'
+        ? 'Online saving: can\'t reach it right now — will keep trying'
+        : `Saved online${s.lastSync ? ` · last saved ${timeOf(s.lastSync)}` : ''}`;
+      onlineLinks.replaceChildren(link('Sign out everywhere', signOutEverywhere));
+      return;
+    }
+    onlineLine.textContent = s.signedOutReason === 'elsewhere'
+      ? 'Signed out from another device. This browser\'s copy of the log was removed.'
+      : s.signedOutReason === 'you' ? 'Signed out on every device.' : 'Online saving is off on this browser.';
+    onlineLinks.replaceChildren(link(form.hidden ? 'Log in to save online' : 'Cancel', () => {
+      form.hidden = !form.hidden;
+      formNote.textContent = '';
+      renderOnline();
+      if (!form.hidden) email.focus();
+    }));
+  }
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    loginButton.disabled = true;
+    formNote.textContent = 'Logging in…';
+    try {
+      await sync.signIn(email.value, password.value);
+      password.value = '';
+      formNote.textContent = '';
+    } catch (error) {
+      formNote.textContent = error.message;
+    } finally {
+      loginButton.disabled = false;
+      renderOnline();
+    }
+  });
+
+  async function signOutEverywhere() {
+    if (!window.confirm('Sign out of PomoPal on every device?\n\nYour log stays safe online. Each device will need your email and password again.')) return;
+    try {
+      await sync.signOutEverywhere();
+    } catch (error) {
+      onlineLine.textContent = error.message;
+    }
+  }
+
+  if (sync) {
+    state.recordedListeners.push(() => sync.syncNow());
+    window.setInterval(() => sync.syncNow(), 120000);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) sync.syncNow(); });
+    sync.syncNow();
+  }
+  renderOnline();
 
   let lastStatus = state.status;
   state.listeners.push((status) => {

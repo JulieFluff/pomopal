@@ -9,6 +9,14 @@ body.web .timer-card { grid-template-columns: minmax(0, 1fr); }
 /* "Keep above other windows" is a Mac app setting; in the browser the pop-out timer (↘) does that job. */
 body.web .topmost { display: none; }
 
+/* Online saving: quiet status line, text links and a small login form. */
+.web-online { margin-top: 8px; }
+.web-online[hidden], .web-login[hidden] { display: none; }
+.web-login { display: grid; gap: 6px; max-width: 260px; margin: 6px auto 0; }
+.web-login input { width: 100%; height: 40px; padding: 0 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--input); color: var(--ink); font-size: 14px; }
+.web-login button { min-height: 40px; background: var(--control); font-weight: 800; }
+.web-login-note { min-height: 1em; margin: 0; color: var(--ink); font-size: 12px; }
+
 /* Pop-out timer: the main page shows a short note while the timer is popped out. */
 body.web.mini .web-popped { margin: 34px 0 6px; color: var(--muted); font-size: 12px; font-weight: 700; text-align: center; }
 body.web-popout { margin: 0; min-width: 0; }
