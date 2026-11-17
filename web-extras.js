@@ -25,24 +25,21 @@
   });
   intentionWrap.before(categoryRow);
 
-  // Suggestions while typing, and one-click recent tasks
-  const taskList = el('datalist', { id: 'web-task-list' });
-  intentionWrap.append(taskList);
-  intention.setAttribute('list', 'web-task-list');
-  const recent = el('div', { class: 'web-recent full-only', 'aria-label': 'Recent tasks' });
-  intentionWrap.after(recent);
+  // Previous tasks stay out of the way until Val asks for one.
+  const taskPickerButton = el('button', { type: 'button', class: 'web-link web-task-picker-toggle' }, 'Choose a previous task');
+  const recent = el('div', { class: 'web-recent full-only', 'aria-label': 'Previous tasks', hidden: '' });
+  taskPickerButton.addEventListener('click', () => { recent.hidden = !recent.hidden; });
+  intentionWrap.after(recent, taskPickerButton);
 
-  // Saved count and downloads
+  // A compact Today line and an on-demand private log.
   const footer = el('section', { class: 'web-log full-only', 'aria-label': 'Your log' });
   const count = el('p', { class: 'web-count', 'aria-live': 'polite' });
   const links = el('p', { class: 'web-links' });
-  const downloadButtons = Object.entries(log.CATEGORIES).map(([key, label]) => {
-    const button = el('button', { type: 'button', class: 'web-link', 'data-export': key }, `Download ${label}`);
-    button.addEventListener('click', () => download(key));
-    return button;
-  });
-  links.append(downloadButtons[0], el('span', { 'aria-hidden': 'true' }, ' · '), downloadButtons[1]);
-  footer.append(count, links);
+  const logButton = el('button', { type: 'button', class: 'web-link' }, 'Your log');
+  const logPanel = el('section', { class: 'web-log-panel', hidden: '', 'aria-label': 'Your log details' });
+  logButton.addEventListener('click', () => { logPanel.hidden = !logPanel.hidden; refreshLog(); });
+  links.append(logButton);
+  footer.append(count, links, logPanel);
   $('.settings').after(footer);
 
   function setCategory(key) {
@@ -65,6 +62,36 @@
     setTimeout(() => URL.revokeObjectURL(link.href), 1000);
   }
 
+  function formatMinutes(minutes) {
+    const hours = Math.floor(minutes / 60);
+    const rest = minutes % 60;
+    return hours ? `${hours} hr${hours === 1 ? '' : 's'}${rest ? ` ${rest} min` : ''}` : `${rest} min`;
+  }
+
+  let logPeriod = 'today';
+  function refreshLog() {
+    const sessions = log.sessionsFor(store.all(), logPeriod).slice().reverse();
+    const summary = log.summaryFor(store.all(), logPeriod);
+    const heading = el('p', { class: 'web-log-summary' }, `${logPeriod === 'today' ? 'Today' : logPeriod === 'week' ? 'This week' : 'This month'}: ${summary.sessions} ${summary.sessions === 1 ? 'session' : 'sessions'} · ${formatMinutes(summary.minutes)}`);
+    const periods = el('p', { class: 'web-log-periods' });
+    [['today', 'Today'], ['week', 'This week'], ['month', 'This month']].forEach(([key, label]) => {
+      const button = el('button', { type: 'button', class: 'web-link', 'aria-pressed': String(key === logPeriod) }, label);
+      button.addEventListener('click', () => { logPeriod = key; refreshLog(); });
+      periods.append(button);
+    });
+    const entries = el('div', { class: 'web-log-entries' });
+    entries.replaceChildren(...sessions.map((s) => el('p', {}, `${s.date} · ${s.time.slice(0, 5)} · ${s.activity} · ${s.durationMinutes} min · ${log.CATEGORIES[s.category]}`)));
+    if (!sessions.length) entries.append(el('p', {}, 'No completed sessions in this period yet.'));
+    const downloads = el('p', { class: 'web-links' });
+    Object.entries(log.CATEGORIES).forEach(([key, label]) => {
+      const button = el('button', { type: 'button', class: 'web-link' }, `Download ${label}`);
+      button.disabled = !store.all().some((s) => s.category === key);
+      button.addEventListener('click', () => download(key));
+      downloads.append(button);
+    });
+    logPanel.replaceChildren(heading, periods, entries, downloads);
+  }
+
   function refresh() {
     const sessions = store.all();
     const locked = state.status === 'running' || state.status === 'paused';
@@ -78,16 +105,15 @@
     const tasks = log.recentTasks(sessions, state.category);
     recent.replaceChildren(...tasks.map((task) => {
       const button = el('button', { type: 'button', title: task }, task);
-      button.addEventListener('click', () => useTask(task));
+      button.addEventListener('click', () => { useTask(task); recent.hidden = true; });
       return button;
     }));
-    recent.hidden = tasks.length === 0;
-    taskList.replaceChildren(...log.recentTasks(sessions, state.category, 50).map((task) => el('option', { value: task })));
+    taskPickerButton.hidden = tasks.length === 0;
+    if (tasks.length === 0) recent.hidden = true;
 
-    const counts = Object.keys(log.CATEGORIES).map((key) => sessions.filter((s) => s.category === key).length);
-    const where = sync?.status().signedIn ? 'Your log' : 'Saved in this browser';
-    count.textContent = `${where}: ${counts[0]} Day job · ${counts[1]} Personal`;
-    downloadButtons.forEach((button, i) => { button.disabled = counts[i] === 0; });
+    const today = log.summaryFor(sessions, 'today');
+    count.textContent = `Today: ${today.sessions} ${today.sessions === 1 ? 'session' : 'sessions'} · ${formatMinutes(today.minutes)}`;
+    refreshLog();
   }
 
   // Pop-out timer: the Mac app's mini button (↘) opens PomoPal's friend and countdown in a

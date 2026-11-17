@@ -165,8 +165,10 @@
   function resetTimer() {
     stopClock();
     mascot.classList.remove('completing', 'completed');
-    timer.reset();
+    if (desktop.platform === 'web') timer.clear();
+    else timer.reset();
     $('#intention').value = '';
+    setDurationSelection();
     persist();
   }
 

@@ -1,7 +1,7 @@
 // PomoPal browser version: the session log kept in this browser, recent tasks, and split CSV export.
 (function initWebLog(globalScope) {
   const STORAGE_KEY = 'pomopal.web.sessions';
-  const CATEGORIES = { dayjob: 'Day job', personal: 'Personal' };
+  const CATEGORIES = { dayjob: 'Work', personal: 'Personal' };
 
   function normaliseCategory(value) {
     return Object.hasOwn(CATEGORIES, value) ? value : 'dayjob';
@@ -74,8 +74,23 @@
   }
 
   function exportFileName(category, today = new Date()) {
-    const label = category === 'personal' ? 'Personal' : 'DayJob';
+    const label = category === 'personal' ? 'Personal' : 'Work';
     return `PomoPal_${label}_${localParts(today).date}.csv`;
+  }
+
+  function sessionsFor(sessions, period, now = new Date()) {
+    const today = localParts(now).date;
+    if (period === 'today') return sessions.filter((s) => s.date === today);
+    if (period === 'month') return sessions.filter((s) => s.date?.slice(0, 7) === today.slice(0, 7));
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
+    const first = localParts(start).date;
+    return sessions.filter((s) => s.date >= first && s.date <= today);
+  }
+
+  function summaryFor(sessions, period, now = new Date()) {
+    const selected = sessionsFor(sessions, period, now);
+    return { sessions: selected.length, minutes: selected.reduce((total, s) => total + (Number(s.durationMinutes) || 0), 0) };
   }
 
   // Each session has an id so the same session is never saved twice when devices share
@@ -120,7 +135,7 @@
   }
 
   const exportsObject = {
-    STORAGE_KEY, CATEGORIES, normaliseCategory, parseSessions, newId, createSession, recentTasks, toCsv, exportFileName, createStore,
+    STORAGE_KEY, CATEGORIES, normaliseCategory, parseSessions, newId, createSession, recentTasks, toCsv, exportFileName, sessionsFor, summaryFor, createStore,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = exportsObject;
   globalScope.PomoWebLog = exportsObject;

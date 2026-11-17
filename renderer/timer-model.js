@@ -24,7 +24,7 @@
     }
 
     start() {
-      if (this.status === 'complete') return false;
+      if (this.status === 'complete' || this.remaining <= 0) return false;
       this.status = 'running';
       this.justCompleted = false;
       this.notify();
@@ -54,6 +54,14 @@
 
     reset() {
       this.remaining = this.minutes * 60;
+      this.status = 'ready';
+      this.justCompleted = false;
+      this.notify();
+    }
+
+    clear() {
+      this.minutes = 0;
+      this.remaining = 0;
       this.status = 'ready';
       this.justCompleted = false;
       this.notify();
