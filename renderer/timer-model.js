@@ -67,6 +67,11 @@
       this.notify();
     }
 
+    elapsedMinutes() {
+      const elapsed = Math.max(0, this.minutes * 60 - this.remaining);
+      return elapsed ? Math.ceil(elapsed / 60) : 0;
+    }
+
     continueWith(minutes = this.minutes) {
       if (this.status !== 'complete') return false;
       this.minutes = Number(minutes);

@@ -24,6 +24,7 @@
   const status = $('#status');
   const mascot = $('#mascot');
   const startStop = $('#start-stop');
+  const logTime = $('#log-time');
   const settingsDialog = $('#settings-dialog');
   const customDuration = $('#custom-duration');
   const customMinutes = $('#custom-minutes');
@@ -101,6 +102,7 @@
     time.textContent = formatTime(snapshot.remaining);
     startStop.textContent = snapshot.status === 'running' ? 'Pause' : snapshot.status === 'paused' ? 'Resume' : complete ? 'Continue' : 'Start';
     startStop.disabled = false;
+    logTime.disabled = snapshot.status !== 'running' && snapshot.status !== 'paused';
     $('#completion-actions').hidden = !complete;
     $('#completed-task').textContent = complete ? ($('#intention').value.trim() || 'This activity') : '';
     $('#continue-task').textContent = `Continue for ${snapshot.minutes} min`;
@@ -167,6 +169,18 @@
     mascot.classList.remove('completing', 'completed');
     if (desktop.platform === 'web') timer.clear();
     else timer.reset();
+    $('#intention').value = '';
+    setDurationSelection();
+    persist();
+  }
+
+  function logElapsedTime() {
+    const durationMinutes = timer.elapsedMinutes();
+    if (!durationMinutes) return;
+    const activity = $('#intention').value.trim() || 'Unspecified activity';
+    stopClock();
+    desktop.recordCompletedSession({ activity, durationMinutes }).catch((error) => console.error('PomoPal could not record the logged time', error));
+    timer.clear();
     $('#intention').value = '';
     setDurationSelection();
     persist();
@@ -242,6 +256,7 @@
   }
 
   startStop.addEventListener('click', toggleTimer);
+  logTime.addEventListener('click', logElapsedTime);
   $('#reset').addEventListener('click', resetTimer);
   $('#continue-task').addEventListener('click', () => continueTask(timer.minutes, true));
   $('#new-task').addEventListener('click', startNewTask);
