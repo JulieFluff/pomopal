@@ -47,7 +47,8 @@
     };
   }
 
-  function recentTasks(sessions, category, limit = 6) {
+  // Typing suggestions remember only the last 15 different task names (Val, 2026-11-18).
+  function recentTasks(sessions, category, limit = 15) {
     const seen = new Set();
     const tasks = [];
     for (let i = sessions.length - 1; i >= 0 && tasks.length < limit; i -= 1) {
@@ -61,31 +62,123 @@
     return tasks;
   }
 
+  // Suggestions while typing: names that start with the typed text first, then names that
+  // contain it. With nothing typed yet, the last few tasks.
+  function matchTasks(tasks, typed, limit = 5) {
+    const text = String(typed || '').trim().toLowerCase();
+    if (!text) return tasks.slice(0, 3);
+    const starts = tasks.filter((t) => t.toLowerCase().startsWith(text));
+    const contains = tasks.filter((t) => !t.toLowerCase().startsWith(text) && t.toLowerCase().includes(text));
+    return [...starts, ...contains].filter((t) => t.toLowerCase() !== text).slice(0, limit);
+  }
+
+  function inCategory(sessions, category) {
+    return category === 'all' ? sessions : sessions.filter((s) => s.category === category);
+  }
+
   function csvCell(value) {
     const text = String(value ?? '');
     return /[",\n\r]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
   }
 
   function toCsv(sessions, category) {
-    const rows = sessions
-      .filter((s) => s.category === category)
-      .map((s) => [s.date, s.time, CATEGORIES[s.category], s.activity, s.durationMinutes].map(csvCell).join(','));
-    return `date,time,category,work,duration_minutes\n${rows.map((r) => `${r}\n`).join('')}`;
+    const rows = inCategory(sessions, category)
+      .map((s) => [s.date, s.time, CATEGORIES[s.category], s.activity, s.durationMinutes, s.note || ''].map(csvCell).join(','));
+    return `date,time,category,work,duration_minutes,note\n${rows.map((r) => `${r}\n`).join('')}`;
   }
 
   function exportFileName(category, today = new Date()) {
-    const label = category === 'personal' ? 'Personal' : 'Work';
+    const label = category === 'personal' ? 'Personal' : category === 'all' ? 'All' : 'Work';
     return `PomoPal_${label}_${localParts(today).date}.csv`;
+  }
+
+  function weekStart(now) {
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
+    return start;
   }
 
   function sessionsFor(sessions, period, now = new Date()) {
     const today = localParts(now).date;
     if (period === 'today') return sessions.filter((s) => s.date === today);
     if (period === 'month') return sessions.filter((s) => s.date?.slice(0, 7) === today.slice(0, 7));
-    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
-    const first = localParts(start).date;
+    if (period === 'year') return sessions.filter((s) => s.date?.slice(0, 4) === today.slice(0, 4));
+    const first = localParts(weekStart(now)).date;
     return sessions.filter((s) => s.date >= first && s.date <= today);
+  }
+
+  const minutesOf = (list) => list.reduce((total, s) => total + (Number(s.durationMinutes) || 0), 0);
+
+  // Bars for the Log screen: a bar per day of the week or month, or per month of the year.
+  function chartFor(sessions, period, now = new Date()) {
+    if (period === 'week') {
+      const start = weekStart(now);
+      return 'MTWTFSS'.split('').map((label, i) => {
+        const day = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
+        const date = localParts(day).date;
+        return { label, minutes: minutesOf(sessions.filter((s) => s.date === date)), current: date === localParts(now).date };
+      });
+    }
+    if (period === 'month') {
+      const days = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+      const month = localParts(now).date.slice(0, 7);
+      return Array.from({ length: days }, (_, i) => {
+        const date = `${month}-${String(i + 1).padStart(2, '0')}`;
+        return { label: (i + 1) % 7 === 1 ? String(i + 1) : '', minutes: minutesOf(sessions.filter((s) => s.date === date)), current: i + 1 === now.getDate() };
+      });
+    }
+    if (period === 'year') {
+      const year = String(now.getFullYear());
+      return 'JFMAMJJASOND'.split('').map((label, i) => {
+        const month = `${year}-${String(i + 1).padStart(2, '0')}`;
+        return { label, minutes: minutesOf(sessions.filter((s) => s.date?.slice(0, 7) === month)), current: i === now.getMonth() };
+      });
+    }
+    return [];
+  }
+
+  // Time per task, biggest first.
+  function topTasks(sessions, limit = 5) {
+    const totals = new Map();
+    sessions.forEach((s) => {
+      const key = String(s.activity).toLowerCase();
+      const entry = totals.get(key) || { activity: s.activity, minutes: 0 };
+      entry.minutes += Number(s.durationMinutes) || 0;
+      totals.set(key, entry);
+    });
+    return [...totals.values()].sort((a, b) => b.minutes - a.minutes).slice(0, limit);
+  }
+
+  function formatDuration(minutes) {
+    const total = Math.max(0, Math.round(Number(minutes) || 0));
+    const hours = Math.floor(total / 60);
+    const rest = total % 60;
+    if (!hours) return `${rest}m`;
+    return rest ? `${hours}h ${rest}m` : `${hours}h`;
+  }
+
+  const DAY = { weekday: 'short', day: 'numeric', month: 'short' };
+  function dayLabel(date) {
+    const [y, m, d] = String(date).split('-').map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString('en-GB', DAY).replace(',', '');
+  }
+
+  function rangeLabel(period, now = new Date()) {
+    if (period === 'today') return now.toLocaleDateString('en-GB', DAY).replace(',', '');
+    if (period === 'month') return now.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+    if (period === 'year') return String(now.getFullYear());
+    const start = weekStart(now);
+    const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6);
+    const short = (d) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+    return `${short(start)} – ${short(end)}`;
+  }
+
+  // The list as plain text for copy and paste: one line per entry, newest first,
+  // columns separated by tabs so it also pastes into a spreadsheet.
+  function toCopyText(sessions) {
+    return sessions.slice().reverse()
+      .map((s) => [dayLabel(s.date), String(s.time).slice(0, 5), `${s.durationMinutes} min`, CATEGORIES[s.category], s.activity, s.note || ''].join('\t').replace(/\t+$/, ''))
+      .join('\n');
   }
 
   function summaryFor(sessions, period, now = new Date()) {
@@ -113,7 +206,23 @@
         write(sessions);
         return { ok: true, count: sessions.length };
       },
-      unsynced: () => read().filter((s) => !s.synced),
+      // A session waits to go online while its note card is open, so the note goes with it.
+      unsynced: () => read().filter((s) => !s.synced && !s.pendingNote),
+      update(id, patch) {
+        const sessions = read();
+        const session = sessions.find((s) => s.id === id);
+        if (!session) return false;
+        Object.assign(session, patch);
+        write(sessions);
+        return true;
+      },
+      // On opening the page, nothing is still waiting for a note.
+      releaseNotes() {
+        const sessions = read();
+        if (!sessions.some((s) => s.pendingNote)) return;
+        sessions.forEach((s) => { delete s.pendingNote; });
+        write(sessions);
+      },
       markSynced(ids) {
         const done = new Set(ids);
         const sessions = read();
@@ -135,7 +244,8 @@
   }
 
   const exportsObject = {
-    STORAGE_KEY, CATEGORIES, normaliseCategory, parseSessions, newId, createSession, recentTasks, toCsv, exportFileName, sessionsFor, summaryFor, createStore,
+    STORAGE_KEY, CATEGORIES, normaliseCategory, parseSessions, newId, createSession, recentTasks, matchTasks, inCategory, toCsv, exportFileName, sessionsFor, summaryFor, createStore,
+    chartFor, topTasks, formatDuration, dayLabel, rangeLabel, toCopyText,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = exportsObject;
   globalScope.PomoWebLog = exportsObject;

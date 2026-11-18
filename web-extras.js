@@ -1,12 +1,15 @@
-// PomoPal browser version: adds Day job / Personal, recent tasks and split export
-// around the shared screens. Loaded after ../renderer/app.js; changes nothing in it.
+// PomoPal browser version (work look, locked design Val 2026-11-18): Work / Personal,
+// typing suggestions, the note card after time's up or Done, the Log screen, the pop-out
+// timer and online saving. Loaded after ../renderer/app.js; changes nothing in it.
 (() => {
   const log = window.PomoWebLog;
   const state = window.PomoWebState;
   const store = log.createStore(localStorage);
+  store.releaseNotes();
   const $ = (selector) => document.querySelector(selector);
   const intention = $('#intention');
-  const intentionWrap = $('.intention-wrap');
+  const timeEl = $('#time'); // kept: it moves into the pop-out window and back
+  const isComplete = () => document.body.classList.contains('timer-complete');
 
   function el(tag, attributes = {}, text = '') {
     const node = document.createElement(tag);
@@ -15,32 +18,27 @@
     return node;
   }
 
-  // Day job / Personal
-  const categoryRow = el('div', { class: 'web-category full-only', role: 'group', 'aria-label': 'Who is this for?' });
+  function link(text, onClick, extraClass = '') {
+    const button = el('button', { type: 'button', class: `text-link ${extraClass}`.trim() }, text);
+    button.addEventListener('click', onClick);
+    return button;
+  }
+
+  // The mug in the full timer is only the logo. (In the pop-out the shared app uses it to
+  // start the same task again once time is up.)
+  document.addEventListener('click', (event) => {
+    if (event.target?.closest?.('#mascot')) event.stopPropagation();
+  }, true);
+
+  // ---- Work / Personal ----
+  const categoryRow = el('div', { class: 'seg web-category', role: 'group', 'aria-label': 'Work or personal' });
   const categoryButtons = Object.entries(log.CATEGORIES).map(([key, label]) => {
     const button = el('button', { type: 'button', 'data-category': key }, label);
     button.addEventListener('click', () => setCategory(key));
     categoryRow.append(button);
     return button;
   });
-  intentionWrap.before(categoryRow);
-
-  // Previous tasks stay out of the way until Val asks for one.
-  const taskPickerButton = el('button', { type: 'button', class: 'web-link web-task-picker-toggle' }, 'Choose a previous task');
-  const recent = el('div', { class: 'web-recent full-only', 'aria-label': 'Previous tasks', hidden: '' });
-  taskPickerButton.addEventListener('click', () => { recent.hidden = !recent.hidden; });
-  intentionWrap.after(recent, taskPickerButton);
-
-  // A compact Today line and an on-demand private log.
-  const footer = el('section', { class: 'web-log full-only', 'aria-label': 'Your log' });
-  const count = el('p', { class: 'web-count', 'aria-live': 'polite' });
-  const links = el('p', { class: 'web-links' });
-  const logButton = el('button', { type: 'button', class: 'web-link' }, 'Your log');
-  const logPanel = el('section', { class: 'web-log-panel', hidden: '', 'aria-label': 'Your log details' });
-  logButton.addEventListener('click', () => { logPanel.hidden = !logPanel.hidden; refreshLog(); });
-  links.append(logButton);
-  footer.append(count, links, logPanel);
-  $('.settings').after(footer);
+  $('#category-slot').append(categoryRow);
 
   function setCategory(key) {
     state.category = log.normaliseCategory(key);
@@ -48,93 +46,327 @@
     refresh();
   }
 
-  function useTask(task) {
-    intention.value = task;
-    intention.dispatchEvent(new Event('input', { bubbles: true }));
+  // ---- Status word, progress line and tab title ----
+  const STATUS = { ready: 'Ready', running: 'Focusing', paused: 'Paused', complete: "Time's up" };
+  let plannedMinutes = Number($('#custom-minutes').value) || 25;
+  const secondsOf = (text) => {
+    const [m, s] = String(text).split(':').map(Number);
+    return (m || 0) * 60 + (s || 0);
+  };
+
+  function refreshClock() {
+    const { status } = state;
+    const shown = timeEl.textContent;
+    const total = (Number($('#custom-minutes').value) || 0) * 60;
+    const done = status === 'complete' ? 1 : total ? Math.min(1, Math.max(0, 1 - secondsOf(shown) / total)) : 0;
+    $('#web-status').textContent = STATUS[status] || 'Ready';
+    $('#progress-bar').style.width = `${(done * 100).toFixed(2)}%`;
+    $('#done-hint').hidden = status !== 'running' && status !== 'paused';
+    document.title = status === 'running' || status === 'paused' ? shown : status === 'complete' ? "Time's up" : 'Focus';
+    syncPopout();
+  }
+  new MutationObserver(refreshClock).observe(timeEl, { childList: true, characterData: true, subtree: true });
+
+  // ---- Typing suggestions (replace "Choose a previous task", Val 2026-11-18) ----
+  const suggestions = $('#suggestions');
+  let options = [];
+  let active = -1;
+
+  function hideSuggestions() {
+    suggestions.hidden = true;
+    options = [];
+    active = -1;
   }
 
-  function download(category) {
-    const csv = log.toCsv(store.all(), category);
-    const link = el('a', { href: URL.createObjectURL(new Blob([csv], { type: 'text/csv' })), download: log.exportFileName(category) });
-    document.body.append(link);
-    link.click();
-    link.remove();
-    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
-  }
-
-  function formatMinutes(minutes) {
-    const hours = Math.floor(minutes / 60);
-    const rest = minutes % 60;
-    return hours ? `${hours} hr${hours === 1 ? '' : 's'}${rest ? ` ${rest} min` : ''}` : `${rest} min`;
-  }
-
-  let logPeriod = 'today';
-  function refreshLog() {
-    const sessions = log.sessionsFor(store.all(), logPeriod).slice().reverse();
-    const summary = log.summaryFor(store.all(), logPeriod);
-    const heading = el('p', { class: 'web-log-summary' }, `${logPeriod === 'today' ? 'Today' : logPeriod === 'week' ? 'This week' : 'This month'}: ${summary.sessions} ${summary.sessions === 1 ? 'session' : 'sessions'} · ${formatMinutes(summary.minutes)}`);
-    const periods = el('p', { class: 'web-log-periods' });
-    [['today', 'Today'], ['week', 'This week'], ['month', 'This month']].forEach(([key, label]) => {
-      const button = el('button', { type: 'button', class: 'web-link', 'aria-pressed': String(key === logPeriod) }, label);
-      button.addEventListener('click', () => { logPeriod = key; refreshLog(); });
-      periods.append(button);
-    });
-    const entries = el('div', { class: 'web-log-entries' });
-    entries.replaceChildren(...sessions.map((s) => el('p', {}, `${s.date} · ${s.time.slice(0, 5)} · ${s.activity} · ${s.durationMinutes} min · ${log.CATEGORIES[s.category]}`)));
-    if (!sessions.length) entries.append(el('p', {}, 'No completed sessions in this period yet.'));
-    const downloads = el('p', { class: 'web-links' });
-    Object.entries(log.CATEGORIES).forEach(([key, label]) => {
-      const button = el('button', { type: 'button', class: 'web-link' }, `Download ${label}`);
-      button.disabled = !store.all().some((s) => s.category === key);
-      button.addEventListener('click', () => download(key));
-      downloads.append(button);
-    });
-    logPanel.replaceChildren(heading, periods, entries, downloads);
-  }
-
-  function refresh() {
-    const sessions = store.all();
-    const locked = state.status === 'running' || state.status === 'paused';
-    categoryButtons.forEach((button) => {
-      const selected = button.dataset.category === state.category;
-      button.classList.toggle('selected', selected);
-      button.setAttribute('aria-pressed', String(selected));
-      button.disabled = locked && !selected;
-    });
-
-    const tasks = log.recentTasks(sessions, state.category);
-    recent.replaceChildren(...tasks.map((task) => {
-      const button = el('button', { type: 'button', title: task }, task);
-      button.addEventListener('click', () => { useTask(task); recent.hidden = true; });
+  function showSuggestions() {
+    if (document.activeElement !== intention) { hideSuggestions(); return; }
+    options = log.matchTasks(log.recentTasks(store.all(), state.category), intention.value);
+    active = -1;
+    const typed = intention.value.trim();
+    suggestions.replaceChildren(...options.map((task) => {
+      const button = el('button', { type: 'button', role: 'option', class: 'suggestion' });
+      if (typed && task.toLowerCase().startsWith(typed.toLowerCase())) {
+        button.append(el('b', {}, task.slice(0, typed.length)), document.createTextNode(task.slice(typed.length)));
+      } else {
+        button.textContent = task;
+      }
+      button.addEventListener('mousedown', (event) => event.preventDefault());
+      button.addEventListener('click', () => choose(task));
       return button;
     }));
-    taskPickerButton.hidden = tasks.length === 0;
-    if (tasks.length === 0) recent.hidden = true;
-
-    const today = log.summaryFor(sessions, 'today');
-    count.textContent = `Today: ${today.sessions} ${today.sessions === 1 ? 'session' : 'sessions'} · ${formatMinutes(today.minutes)}`;
-    refreshLog();
+    suggestions.hidden = options.length === 0;
   }
 
-  // Pop-out timer: the Mac app's mini button (↘) opens PomoPal's friend and countdown in a
-  // small window. Chrome and Edge keep it above other windows (Picture-in-Picture); other
-  // browsers get a normal small window. The real mascot and countdown move into it, so the
-  // shared app keeps driving them exactly as in the Mac app's mini mode.
-  const popped = el('p', { class: 'mini-only web-popped' }, 'PomoPal is in the pop-out window');
-  $('.timer-card').append(popped);
-  const popout = { win: null, moved: [] };
+  function choose(task) {
+    intention.value = task;
+    intention.dispatchEvent(new Event('input', { bubbles: true }));
+    hideSuggestions();
+  }
 
+  function highlight() {
+    [...suggestions.children].forEach((button, i) => button.classList.toggle('hi', i === active));
+  }
+
+  intention.addEventListener('input', showSuggestions);
+  intention.addEventListener('focus', showSuggestions);
+  intention.addEventListener('blur', hideSuggestions);
+  intention.addEventListener('keydown', (event) => {
+    if (suggestions.hidden || !options.length) return;
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      active = (active + (event.key === 'ArrowDown' ? 1 : -1) + options.length) % options.length;
+      highlight();
+    } else if (event.key === 'Enter' && active >= 0) {
+      event.preventDefault();
+      choose(options[active]);
+    } else if (event.key === 'Escape') {
+      event.stopPropagation(); // closes the list only; doesn't reset the timer
+      hideSuggestions();
+    }
+  });
+
+  // ---- Custom minutes: a quiet "Custom" link opens the small box ----
+  const customForm = $('#custom-duration');
+  $('#custom-toggle').addEventListener('click', () => {
+    customForm.hidden = !customForm.hidden;
+    $('#custom-toggle').setAttribute('aria-expanded', String(!customForm.hidden));
+    if (!customForm.hidden) $('#custom-minutes').focus();
+  });
+  customForm.addEventListener('submit', () => {
+    customForm.hidden = true;
+    $('#custom-toggle').setAttribute('aria-expanded', 'false');
+    refreshClock();
+  });
+  document.querySelectorAll('[data-minutes]').forEach((button) => button.addEventListener('click', refreshClock));
+
+  // ---- Screens: timer, note card, Log ----
+  let view = 'timer';
+  function showView(next) {
+    view = next;
+    $('#timer-view').hidden = next !== 'timer';
+    $('#note-card').hidden = next !== 'note';
+    $('#log-view').hidden = next !== 'log';
+    if (next === 'log') renderLog();
+  }
+
+  // ---- Note card: after time's up or Done (Val 2026-11-18) ----
+  let noteFor = null;
+
+  function openNote(session, timeUp) {
+    noteFor = { session, timeUp };
+    $('#note-status').textContent = timeUp ? "Time's up · logged" : 'Logged';
+    $('#note-card').classList.toggle('up', timeUp);
+    $('#note-title').textContent = `${session.durationMinutes} min · ${session.activity}`;
+    $('#note-sub').textContent = `${log.CATEGORIES[session.category]} · ${log.dayLabel(session.date)}, ${String(session.time).slice(0, 5)}`;
+    $('#note-text').value = '';
+    showView('note');
+    syncPopout();
+  }
+
+  function closeNote(text = '') {
+    if (!noteFor) return null;
+    const { session } = noteFor;
+    const note = String(text).trim();
+    store.update(session.id, note ? { note, pendingNote: undefined } : { pendingNote: undefined });
+    noteFor = null;
+    showView('timer');
+    sync?.syncNow();
+    refresh();
+    return session;
+  }
+
+  function freshTask() {
+    if (isComplete()) $('#new-task').click();
+  }
+
+  $('#save-note').addEventListener('click', () => { closeNote($('#note-text').value); freshTask(); });
+  $('#skip-note').addEventListener('click', () => { closeNote(); freshTask(); });
+  $('#same-again').addEventListener('click', () => {
+    const complete = isComplete();
+    const session = closeNote($('#note-text').value);
+    if (!session) return;
+    if (complete) { $('#continue-task').click(); return; }
+    // After Done the timer is cleared, so set the same task and length again and start.
+    intention.value = session.activity;
+    intention.dispatchEvent(new Event('input', { bubbles: true }));
+    hideSuggestions();
+    $('#custom-minutes').value = String(plannedMinutes);
+    if (customForm.requestSubmit) customForm.requestSubmit();
+    else customForm.dispatchEvent(new Event('submit', { cancelable: true }));
+    $('#start-stop').click();
+  });
+  $('#note-text').addEventListener('keydown', (event) => { if (event.key === 'Escape') event.stopPropagation(); });
+
+  // ---- Log screen (separate from the timer) ----
+  let logPeriod = 'week';
+  let logCategory = state.category;
+  const logBody = el('div', { class: 'log-body' });
+  const online = el('div', { class: 'web-online' });
+  $('#log-view').append(logBody, online);
+  $('#open-log').addEventListener('click', () => { logCategory = state.category; showView('log'); });
+
+  function seg(items, current, onPick, label) {
+    const row = el('div', { class: 'seg', role: 'group', 'aria-label': label });
+    items.forEach(([key, text]) => {
+      const button = el('button', { type: 'button', 'aria-pressed': String(key === current) }, text);
+      if (key === current) button.classList.add('on');
+      button.addEventListener('click', () => { onPick(key); renderLog(); });
+      row.append(button);
+    });
+    return row;
+  }
+
+  function download(sessions) {
+    const csv = log.toCsv(sessions, logCategory);
+    const a = el('a', { href: URL.createObjectURL(new Blob([csv], { type: 'text/csv' })), download: log.exportFileName(logCategory) });
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+
+  async function copyText(text, button) {
+    let ok = false;
+    try {
+      await navigator.clipboard.writeText(text);
+      ok = true;
+    } catch {
+      const area = el('textarea', { class: 'copy-buffer', 'aria-hidden': 'true' });
+      area.value = text;
+      document.body.append(area);
+      area.select();
+      try { ok = document.execCommand('copy'); } catch { ok = false; }
+      area.remove();
+    }
+    button.textContent = ok ? 'Copied' : 'Could not copy';
+    setTimeout(() => { button.textContent = 'Copy'; }, 1500);
+  }
+
+  function renderLog() {
+    const selected = log.sessionsFor(log.inCategory(store.all(), logCategory), logPeriod);
+    const minutes = selected.reduce((total, s) => total + (Number(s.durationMinutes) || 0), 0);
+
+    const head = el('div', { class: 'log-head' });
+    head.append($('#note-card .mug').cloneNode(true), el('span', { class: 'log-title' }, 'Log'), link('← Timer', () => showView(noteFor ? 'note' : 'timer'), 'back'));
+
+    const rangeRow = el('div', { class: 'log-row' });
+    rangeRow.append(
+      seg([['today', 'D'], ['week', 'W'], ['month', 'M'], ['year', 'Y']], logPeriod, (key) => { logPeriod = key; }, 'Period'),
+      el('span', { class: 'range' }, log.rangeLabel(logPeriod)),
+    );
+    const cats = seg([['dayjob', 'Work'], ['personal', 'Personal'], ['all', 'All']], logCategory, (key) => { logCategory = key; }, 'Which log');
+    cats.classList.add('log-cats');
+
+    const total = el('p', { class: 'total' }, log.formatDuration(minutes));
+    total.append(el('small', {}, `${selected.length} ${selected.length === 1 ? 'session' : 'sessions'}`));
+
+    const parts = [head, rangeRow, cats, total];
+    const chart = log.chartFor(selected, logPeriod);
+    if (chart.length) {
+      const most = Math.max(1, ...chart.map((b) => b.minutes));
+      const bars = el('div', { class: 'days', 'aria-hidden': 'true' });
+      const labels = el('div', { class: 'day-labels', 'aria-hidden': 'true' });
+      chart.forEach((b) => {
+        const bar = el('div', { class: b.current ? 'today' : '', title: `${log.formatDuration(b.minutes)}` });
+        bar.style.height = `${Math.max(b.minutes ? 6 : 2, (b.minutes / most) * 100)}%`;
+        bars.append(bar);
+        labels.append(el('span', {}, b.label));
+      });
+      parts.push(bars, labels);
+    }
+
+    const tasks = log.topTasks(selected);
+    if (tasks.length) {
+      const most = tasks[0].minutes || 1;
+      const list = el('div', { class: 'task-bars' });
+      tasks.forEach((t) => {
+        const row = el('div', { class: 'bar' });
+        const fill = el('i');
+        fill.style.width = `${Math.max(2, (t.minutes / most) * 100)}%`;
+        row.append(el('span', { title: t.activity }, t.activity), fill, el('b', {}, log.formatDuration(t.minutes)));
+        list.append(row);
+      });
+      parts.push(list);
+    }
+
+    const listHead = el('div', { class: 'listhead' });
+    const actions = el('span', { class: 'act' });
+    const copy = link('Copy', () => copyText(log.toCopyText(selected), copy));
+    const save = link('Download spreadsheet', () => download(selected));
+    copy.disabled = save.disabled = !selected.length;
+    actions.append(copy, save);
+    listHead.append(el('span', {}, 'List'), actions);
+
+    const entries = el('div', { class: 'list' });
+    selected.slice().reverse().forEach((s) => {
+      const row = el('div', { class: 'entry' });
+      row.append(
+        el('span', { class: 'd' }, `${log.dayLabel(s.date)} · ${String(s.time).slice(0, 5)}`),
+        el('span', { class: 'm' }, `${s.durationMinutes} min`),
+        el('span', { class: 'a' }, logCategory === 'all' ? `${s.activity} (${log.CATEGORIES[s.category]})` : s.activity),
+      );
+      if (s.note) row.append(el('span', { class: 'note' }, s.note));
+      entries.append(row);
+    });
+    if (!selected.length) entries.append(el('p', { class: 'empty' }, 'Nothing logged in this period yet.'));
+    parts.push(listHead, entries);
+    logBody.replaceChildren(...parts);
+  }
+
+  // ---- Pop-out timer: the mug and countdown in a small window ----
+  // Chrome and Edge keep it above other windows (Picture-in-Picture); other browsers get a
+  // normal small window. The real mug and countdown move into it, so the shared app keeps
+  // driving them exactly as in the Mac app's mini mode.
+  const popout = { win: null, moved: [], linksKey: '' };
   const exitMini = () => { if (document.body.classList.contains('mini')) $('#expand-toggle').click(); };
+  $('#bring-back').addEventListener('click', exitMini);
 
   function restoreFromPopout() {
     popout.moved.forEach(({ node, marker }) => { marker.replaceWith(node); });
     popout.moved = [];
     popout.win = null;
+    popout.linksKey = '';
+  }
+
+  function miniLinks() {
+    const { status } = state;
+    const press = (selector) => () => $(selector).click();
+    const addNote = () => { exitMini(); setTimeout(() => $('#note-text').focus(), 0); };
+    const newTask = () => {
+      if (noteFor) $('#skip-note').click(); else $('#new-task').click();
+      exitMini();
+      setTimeout(() => intention.focus(), 0);
+    };
+    if (status === 'complete') return [['New task', newTask], ['Add note', addNote, 'strong'], ['Open', exitMini]];
+    if (status === 'running') return [['Pause', press('#start-stop')], ['Done', press('#log-time'), 'strong'], ['Open', exitMini]];
+    if (status === 'paused') return [['Resume', press('#start-stop')], ['Done', press('#log-time'), 'strong'], ['Open', exitMini]];
+    if (noteFor) return [['Add note', addNote, 'strong'], ['Open', exitMini]];
+    return timeEl.textContent === '00:00' ? [['Open', exitMini]] : [['Start', press('#start-stop')], ['Open', exitMini]];
+  }
+
+  function syncPopout() {
+    const { win } = popout;
+    if (!win) return;
+    const doc = win.document;
+    doc.body.classList.toggle('timer-complete', state.status === 'complete');
+    const items = miniLinks();
+    const key = items.map(([text]) => text).join('|');
+    if (key === popout.linksKey) return;
+    popout.linksKey = key;
+    const row = doc.querySelector('.mini-links');
+    row.replaceChildren(...items.map(([text, onClick, extra]) => {
+      const button = doc.createElement('button');
+      button.type = 'button';
+      button.className = `text-link ${extra || ''}`.trim();
+      button.textContent = text;
+      button.addEventListener('click', onClick);
+      return button;
+    }));
   }
 
   function fillPopout(win) {
     const doc = win.document;
-    doc.title = 'PomoPal';
+    doc.title = 'Focus';
     document.querySelectorAll('link[rel="stylesheet"], style').forEach((sheet) => {
       const copy = doc.createElement(sheet.tagName === 'STYLE' ? 'style' : 'link');
       if (sheet.tagName === 'STYLE') copy.textContent = sheet.textContent;
@@ -144,25 +376,20 @@
     doc.documentElement.dataset.theme = document.documentElement.dataset.theme || 'light';
     doc.body.className = 'web mini web-popout';
     const card = doc.createElement('section');
-    card.className = 'timer-card';
-    const back = doc.createElement('button');
-    back.type = 'button';
-    back.className = 'expand-button';
-    back.textContent = '↗';
-    back.setAttribute('aria-label', 'Return to full timer');
-    back.addEventListener('click', exitMini);
-    card.append(back);
+    card.className = 'card mini-card';
+    const row = doc.createElement('div');
+    row.className = 'mini-row';
     ['#mascot', '#time'].forEach((selector) => {
       const node = $(selector);
       const marker = document.createComment('pomopal-popout');
       node.before(marker);
       popout.moved.push({ node, marker });
-      card.append(node);
+      row.append(node);
     });
-    const shell = doc.createElement('main');
-    shell.className = 'app-shell';
-    shell.append(card);
-    doc.body.append(shell);
+    const links = doc.createElement('div');
+    links.className = 'links mini-links';
+    card.append(row, links);
+    doc.body.append(card);
     const ticker = win.setInterval(() => state.catchUpNow?.(), 500);
     win.addEventListener('pagehide', () => {
       win.clearInterval(ticker);
@@ -178,8 +405,8 @@
     let win = null;
     try {
       win = window.documentPictureInPicture
-        ? await window.documentPictureInPicture.requestWindow({ width: 230, height: 210 })
-        : window.open('', 'pomopal-popout', 'popup,width=230,height=230');
+        ? await window.documentPictureInPicture.requestWindow({ width: 240, height: 150 })
+        : window.open('', 'pomopal-popout', 'popup,width=240,height=170');
     } catch {
       win = null;
     }
@@ -190,6 +417,7 @@
     }
     popout.win = win;
     fillPopout(win);
+    syncPopout();
   }
 
   function closePopout() {
@@ -206,8 +434,8 @@
   // A saved "mini" from last time can't reopen a pop-out without a click, so start full.
   exitMini();
 
-  // Online saving (quiet text in the footer). Hidden until web-config.js has the Supabase details.
-  const online = el('div', { class: 'web-online' });
+  // ---- Online saving (quiet text at the bottom of the Log screen) ----
+  // Hidden until web-config.js has the Supabase details.
   const onlineLine = el('p', { class: 'web-online-line', 'aria-live': 'polite' });
   const onlineLinks = el('p', { class: 'web-links' });
   const form = el('form', { class: 'web-login', hidden: '' });
@@ -217,7 +445,6 @@
   const formNote = el('p', { class: 'web-login-note', 'aria-live': 'polite' });
   form.append(email, password, loginButton, formNote);
   online.append(onlineLine, onlineLinks, form);
-  footer.append(online);
 
   const subtle = window.crypto?.subtle;
   const sync = window.PomoWebSync && subtle ? window.PomoWebSync.createSync({
@@ -231,11 +458,6 @@
   }) : null;
 
   const timeOf = (ms) => new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-  function link(text, onClick) {
-    const button = el('button', { type: 'button', class: 'web-link' }, text);
-    button.addEventListener('click', onClick);
-    return button;
-  }
 
   function renderOnline() {
     const s = sync?.status();
@@ -277,7 +499,7 @@
   });
 
   async function signOutEverywhere() {
-    if (!window.confirm('Sign out of PomoPal on every device?\n\nYour log stays safe online. Each device will need your email and password again.')) return;
+    if (!window.confirm('Sign out on every device?\n\nYour log stays safe online. Each device will need your email and password again.')) return;
     try {
       await sync.signOutEverywhere();
     } catch (error) {
@@ -285,6 +507,22 @@
     }
   }
 
+  // ---- Keeping everything in step ----
+  function refresh() {
+    const locked = state.status === 'running' || state.status === 'paused';
+    categoryButtons.forEach((button) => {
+      const selected = button.dataset.category === state.category;
+      button.classList.toggle('on', selected);
+      button.setAttribute('aria-pressed', String(selected));
+      button.disabled = locked && !selected;
+    });
+    if (!suggestions.hidden) showSuggestions();
+    if (view === 'log') renderLog();
+  }
+
+  state.recordedListeners.push((result) => {
+    if (result?.session) openNote(result.session, isComplete());
+  });
   if (sync) {
     state.recordedListeners.push(() => sync.syncNow());
     window.setInterval(() => sync.syncNow(), 120000);
@@ -295,9 +533,14 @@
 
   let lastStatus = state.status;
   state.listeners.push((status) => {
+    if (status === 'running') {
+      plannedMinutes = Number($('#custom-minutes').value) || plannedMinutes;
+      if (noteFor) closeNote($('#note-text').value); // started again (mug, Space): the note card closes
+    }
     if (status === lastStatus) return;
     lastStatus = status;
     refresh();
+    refreshClock();
   });
   state.recordedListeners.push(refresh);
   window.addEventListener('storage', (event) => {
@@ -306,5 +549,7 @@
       refresh();
     }
   });
+  showView('timer');
   refresh();
+  refreshClock();
 })();

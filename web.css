@@ -1,50 +1,152 @@
-/* PomoPal browser version: only what the browser needs on top of ../renderer/styles.css. */
-html { background: var(--paper); }
-body.web { overflow-y: auto; }
-body.web .app-shell { min-height: 0; padding-bottom: 24px; -webkit-app-region: no-drag; }
-body.web .titlebar, body.web .titlebar * { cursor: default; }
-/* Keep everything inside the card at the card's width, however long a task name is. */
-body.web .timer-card { grid-template-columns: minmax(0, 1fr); }
+/* PomoPal browser version: work look (locked design docs/PomoPal_work-look-mockup.html, Val 2026-11-18).
+   Warm greys, charcoal text, a darker warm grey accent; the mug turns red when time is up.
+   Stands alone: the Mac app's renderer/styles.css is not loaded here. Icons: assets/icons/. */
+:root {
+  --page: #FFFFFF; --card: #EDEBE8; --card2: #E2DFDB; --ink: #2A2826; --muted: #7F7A75; --line: #D6D2CD;
+  --accent: #2A2826; --onaccent: #EDEBE8; --soft: #CAC5BF; --field: #F5F4F2; --tone: #6F6760; --red: #C2463C;
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  --page: #1A1917; --card: #252321; --card2: #2E2B28; --ink: #ECE8E3; --muted: #9C968F; --line: #3B3733;
+  --accent: #ECE8E3; --onaccent: #252321; --soft: #47423D; --field: #1D1B19; --tone: #BDB4AA; --red: #E2695E;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { background: var(--page); }
+body.web { margin: 0; min-height: 100vh; background: var(--page); color: var(--ink); font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif; -webkit-font-smoothing: antialiased; }
+button, input, textarea, select { font: inherit; color: inherit; }
+button { cursor: pointer; border: 0; background: none; padding: 0; }
+button:disabled { cursor: default; }
+:focus-visible { outline: 2px solid var(--tone); outline-offset: 2px; border-radius: 6px; }
 
-/* "Keep above other windows" is a Mac app setting; in the browser the pop-out timer (↘) does that job. */
-body.web .topmost { display: none; }
+.app-shell { display: flex; flex-direction: column; align-items: center; padding: 32px 16px 40px; }
+.card { width: 100%; max-width: 340px; background: var(--card); border: 1px solid var(--line); border-radius: 22px; padding: 24px; }
+.app-only, .hidden-status, #settings-dialog { display: none !important; }
+.mini-only { display: none; }
+body.mini .full-only, body.mini #timer-view { display: none !important; }
+body.mini:not(.web-popout) .mini-only { display: block; }
 
-/* Online saving: quiet status line, text links and a small login form. */
-.web-online { margin-top: 8px; }
-.web-online[hidden], .web-login[hidden] { display: none; }
+/* Mug (logo, note card, pop-out) */
+.mug { display: block; fill: none; stroke: var(--ink); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.mug-button { display: inline-flex; padding: 0; cursor: default; }
+.mug-button .mug { width: 26px; height: 26px; }
+body.timer-complete .mug-button .mug, .note-card.up .mug { stroke: var(--red); }
+body.timer-complete .mug-button .steam, .note-card.up .steam { transform-box: fill-box; animation: rise 2s ease-in-out infinite; }
+body.timer-complete .mug-button .steam.s2, .note-card.up .steam.s2 { animation-delay: .7s; }
+@keyframes rise { 0% { transform: translateY(2px); opacity: 0; } 40% { opacity: 1; } 100% { transform: translateY(-3px); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .steam { animation: none !important; } }
+
+/* Top row: logo left, quiet menu right */
+.top { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
+.tools { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.icon-button { width: 30px; height: 30px; border-radius: 9px; font-size: 0; display: inline-flex; align-items: center; justify-content: center; color: var(--muted); }
+.icon-button::before { content: ""; width: 18px; height: 18px; background: currentColor; -webkit-mask: var(--icon) center / contain no-repeat; mask: var(--icon) center / contain no-repeat; }
+.icon-button:hover { color: var(--ink); }
+.popout-icon { --icon: url("assets/icons/popout.svg"); }
+.sound-icon { --icon: url("assets/icons/sound-on.svg"); color: var(--ink); background: var(--card2); }
+.sound-icon[aria-pressed="true"] { --icon: url("assets/icons/sound-off.svg"); color: var(--muted); background: none; }
+.theme-icon { --icon: url("assets/icons/moon.svg"); }
+.theme-icon[aria-pressed="true"] { --icon: url("assets/icons/sun.svg"); }
+
+/* Quiet text links */
+.text-link { font-size: 13px; color: var(--muted); padding: 4px 2px; }
+.text-link:hover:not(:disabled) { color: var(--ink); }
+.text-link.strong { color: var(--ink); font-weight: 600; }
+.text-link:disabled { opacity: .45; }
+.links { display: flex; justify-content: center; gap: 22px; }
+
+/* Work / Personal and other small pill rows */
+.seg { display: flex; justify-content: center; gap: 6px; }
+.seg button { font-size: 13px; padding: 5px 14px; border-radius: 999px; color: var(--muted); border: 1px solid transparent; }
+.seg button.on { border-color: var(--ink); color: var(--ink); }
+.seg button:disabled { opacity: .4; }
+.web-category { margin-bottom: 18px; }
+
+/* Timer */
+.status { text-align: center; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--tone); margin: 0; }
+.time { display: block; text-align: center; font-size: 72px; font-weight: 300; letter-spacing: -.02em; font-variant-numeric: tabular-nums; margin: 4px 0 18px; }
+.progress { height: 3px; background: var(--line); border-radius: 2px; margin: -8px 0 18px; overflow: hidden; }
+.progress i { display: block; height: 100%; width: 0; background: var(--tone); border-radius: 2px; transition: width .8s linear; }
+body.timer-complete #timer-view { border-color: var(--tone); box-shadow: 0 0 0 3px color-mix(in srgb, var(--tone) 16%, transparent); }
+
+.intention-wrap { position: relative; }
+.intention-wrap label, .note-card label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+#intention, .note-card textarea, .custom-duration input, .web-login input { width: 100%; background: var(--field); border: 1px solid var(--line); border-radius: 12px; padding: 11px 14px; font-size: 14px; line-height: 1.45; }
+.suggest { position: absolute; left: 0; right: 0; z-index: 2; background: var(--field); border: 1px solid var(--line); border-top: none; border-radius: 0 0 12px 12px; margin-top: -8px; padding: 10px 0 4px; font-size: 13px; }
+.suggestion { display: block; width: 100%; text-align: left; padding: 6px 14px; color: var(--muted); overflow-wrap: anywhere; }
+.suggestion b { color: var(--ink); font-weight: 600; }
+.suggestion:hover, .suggestion.hi { color: var(--ink); background: var(--card2); }
+
+.primary { display: block; width: 100%; margin: 18px 0 12px; background: var(--accent); color: var(--onaccent); border-radius: 999px; padding: 13px; text-align: center; font-size: 15px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.primary:hover { opacity: .9; }
+.hint { font-size: 11px; color: var(--muted); text-align: center; margin: 10px 0 0; }
+
+.presets { display: flex; justify-content: center; align-items: center; gap: 18px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); font-size: 13px; }
+.duration-row { display: flex; gap: 18px; }
+.duration-row button { color: var(--muted); font-size: 13px; padding: 4px 2px; }
+.duration-row button.selected { color: var(--ink); font-weight: 600; }
+.custom-duration { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 12px; font-size: 13px; color: var(--muted); }
+.custom-duration input { width: 80px; padding: 6px 10px; }
+
+/* Note card (time's up, or after Done) */
+.note-card .note-status { display: flex; align-items: center; justify-content: center; gap: 8px; }
+.note-card .mug { width: 20px; height: 20px; }
+.note-card.up { border-color: var(--tone); box-shadow: 0 0 0 3px color-mix(in srgb, var(--tone) 16%, transparent); }
+.note-title { font-size: 22px; font-weight: 300; margin: 10px 0 2px; overflow-wrap: anywhere; }
+.note-sub { font-size: 13px; color: var(--muted); margin: 0 0 16px; }
+.note-card textarea { height: 86px; resize: vertical; }
+
+/* Log screen */
+.log-card { max-width: 470px; }
+.log-head { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+.log-head .mug { width: 20px; height: 20px; }
+.log-title { font-size: 17px; font-weight: 600; }
+.log-head .back { margin-left: auto; }
+.log-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.log-row .range { font-size: 13px; color: var(--muted); }
+.log-cats { justify-content: flex-start; margin-bottom: 14px; }
+.total { font-size: 34px; font-weight: 300; margin: 0; }
+.total small { font-size: 13px; color: var(--muted); margin-left: 8px; }
+.days { display: flex; align-items: flex-end; gap: 4%; height: 70px; margin: 18px 0 4px; }
+.days div { flex: 1; background: var(--soft); border-radius: 4px 4px 2px 2px; min-height: 2px; }
+.days div.today { background: var(--tone); }
+.day-labels { display: flex; gap: 4%; font-size: 10px; color: var(--muted); margin-bottom: 18px; }
+.day-labels span { flex: 1; text-align: center; white-space: nowrap; }
+.task-bars { margin-top: 14px; }
+.bar { display: grid; grid-template-columns: minmax(0, 130px) 1fr 54px; align-items: center; gap: 10px; font-size: 13px; margin-bottom: 8px; }
+.bar span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar i { display: block; height: 6px; border-radius: 3px; background: var(--tone); }
+.bar b { text-align: right; font-weight: 600; }
+.listhead { display: flex; justify-content: space-between; align-items: center; margin: 20px 0 8px; padding-top: 14px; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); }
+.listhead .act { display: flex; gap: 16px; }
+.listhead .act .text-link { color: var(--ink); }
+.list { background: var(--field); border: 1px solid var(--line); border-radius: 12px; padding: 4px 14px; font-size: 13px; max-height: 360px; overflow: auto; }
+/* Long tasks and notes wrap onto more lines (Val, 2026-11-18). */
+.entry { display: grid; grid-template-columns: 100px 52px minmax(0, 1fr); gap: 0 10px; padding: 9px 0; border-bottom: 1px solid var(--line); line-height: 1.45; }
+.entry:last-child { border-bottom: none; }
+.entry .d, .entry .m { color: var(--muted); font-variant-numeric: tabular-nums; }
+.entry .m { text-align: right; }
+.entry .a, .entry .note { overflow-wrap: anywhere; white-space: normal; }
+.entry .note { grid-column: 3; color: var(--muted); font-size: 12px; }
+.list .empty { color: var(--muted); margin: 10px 0; }
+.copy-buffer { position: fixed; left: -9999px; }
+
+/* Online saving: quiet line at the bottom of the Log screen */
+.web-online { margin-top: 18px; font-size: 12px; color: var(--muted); text-align: center; }
+.web-online p { margin: 2px 0; }
 .web-login { display: grid; gap: 6px; max-width: 260px; margin: 6px auto 0; }
-.web-login input { width: 100%; height: 40px; padding: 0 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--input); color: var(--ink); font-size: 14px; }
-.web-login button { min-height: 40px; background: var(--control); font-weight: 800; }
-.web-login-note { min-height: 1em; margin: 0; color: var(--ink); font-size: 12px; }
+.web-login button { min-height: 36px; border-radius: 999px; background: var(--accent); color: var(--onaccent); font-weight: 600; }
+.web-login-note { min-height: 1em; color: var(--ink); }
 
-/* Pop-out timer: the main page shows a short note while the timer is popped out. */
-body.web.mini .web-popped { margin: 34px 0 6px; color: var(--muted); font-size: 12px; font-weight: 700; text-align: center; }
-body.web-popout { margin: 0; min-width: 0; }
-body.web-popout .app-shell { width: 100%; max-width: none; min-height: 100vh; padding: 8px; background: var(--paper); }
-body.web-popout .timer-card { min-height: calc(100vh - 16px); }
+/* Pop-out: the main page shows a short note while the timer is popped out */
+.web-popped { margin-top: 40px; color: var(--muted); font-size: 13px; text-align: center; }
 
-/* Day job / Personal: same look as the duration buttons. */
-.web-category { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; width: 100%; margin-top: 8px; }
-.web-category button { min-height: 38px; background: var(--control); font-weight: 800; }
-.web-category button.selected { background: var(--selected); color: #382a2a; }
-.web-category button:disabled { opacity: .45; cursor: default; transform: none; }
-
-/* Previous tasks are available on demand, never stacked in the timer by default. */
-.web-task-picker-toggle { margin-top: 4px; }
-.web-recent { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; margin-top: 6px; }
-.web-recent[hidden] { display: none; }
-.web-recent button { max-width: 100%; min-height: 32px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--input); font-size: 13px; line-height: 1.3; text-align: left; white-space: normal; overflow-wrap: anywhere; }
-body.timer-complete .web-category, body.timer-complete .web-recent, body.timer-complete .web-task-picker-toggle { display: none; }
-
-/* Today stays quiet; expanded history appears only in Your log. */
-.web-log { margin-top: 12px; color: var(--muted); font-size: 12px; text-align: center; }
-.web-log p { margin: 2px 0; }
-.web-log-panel { margin-top: 8px; padding: 10px; border: 1px solid var(--border); border-radius: 12px; background: var(--input); text-align: left; }
-.web-log-panel[hidden] { display: none; }
-.web-log-summary { color: var(--ink); font-weight: 800; }
-.web-log-periods { display: flex; gap: 8px; flex-wrap: wrap; }
-.web-log-entries { max-height: 230px; overflow: auto; }
-.web-log-entries p { padding: 5px 0; border-top: 1px solid var(--border); }
-.web-link { min-height: 32px; padding: 0 4px; background: none; color: var(--muted); font-weight: 700; }
-.web-link:hover:not(:disabled) { color: var(--ink); transform: none; }
-.web-link:disabled { opacity: .5; cursor: default; transform: none; }
+/* The pop-out window itself: mug left of the time, links centred below, no words otherwise */
+body.web-popout { min-height: 0; }
+body.web-popout .mini-card { max-width: none; min-height: 100vh; border: 0; border-radius: 0; padding: 18px 16px 12px; display: flex; flex-direction: column; justify-content: center; }
+.mini-row { display: flex; align-items: center; justify-content: center; gap: 14px; }
+body.web-popout .mug-button .mug { width: 40px; height: 40px; }
+body.web-popout .mug-button:not(:disabled) { cursor: pointer; }
+body.web-popout .time { font-size: 40px; margin: 0; line-height: 1; }
+.mini-links { gap: 20px; margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--line); }

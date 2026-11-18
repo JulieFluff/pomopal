@@ -53,7 +53,9 @@
       setTimerState(status) { onTimerState(status); },
       recordCompletedSession(session) {
         try {
-          const result = store.add(createSession({ ...session, category: getCategory() }));
+          // pendingNote: held back from online saving until its note card closes.
+          const saved = { ...createSession({ ...session, category: getCategory() }), pendingNote: true };
+          const result = { ...store.add(saved), session: saved };
           onRecorded(result);
           return Promise.resolve(result);
         } catch (error) {

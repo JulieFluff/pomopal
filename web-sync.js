@@ -25,7 +25,7 @@
   const importLock = (subtle, b64) => subtle.importKey('raw', fromB64(b64), 'AES-GCM', false, ['encrypt', 'decrypt']);
 
   async function lockSession(subtle, key, session, randomBytes) {
-    const { synced, ...plain } = session;
+    const { synced, pendingNote, ...plain } = session;
     const iv = randomBytes(12);
     const ct = await subtle.encrypt({ name: 'AES-GCM', iv }, key, enc.encode(JSON.stringify(plain)));
     return JSON.stringify({ v: 1, iv: toB64(iv), ct: toB64(ct) });
