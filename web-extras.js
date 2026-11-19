@@ -146,20 +146,26 @@
     $('#timer-view').hidden = next !== 'timer';
     $('#note-card').hidden = next !== 'note';
     $('#log-view').hidden = next !== 'log';
+    editingId = null;
     if (next === 'log') renderLog();
   }
 
   // ---- Note card: after time's up or Done (Val 2026-11-18) ----
+  // It opens with the notes jotted while the timer ran, ready to tidy or add to.
   let noteFor = null;
+  const noteText = $('#note-text');
 
   function openNote(session, timeUp) {
-    noteFor = { session, timeUp };
+    const jotted = readDraft().trim();
+    noteFor = { session, timeUp, jotted };
     $('#note-status').textContent = timeUp ? "Time's up · logged" : 'Logged';
     $('#note-card').classList.toggle('up', timeUp);
     $('#note-title').textContent = `${session.durationMinutes} min · ${session.activity}`;
     $('#note-sub').textContent = `${log.CATEGORIES[session.category]} · ${log.dayLabel(session.date)}, ${String(session.time).slice(0, 5)}`;
-    $('#note-text').value = '';
+    $('label[for="note-text"]').textContent = jotted ? 'Your notes (edit or add more)' : 'Add a note (optional)';
+    noteText.value = jotted;
     showView('note');
+    renderLines();
     syncPopout();
   }
 
@@ -168,7 +174,9 @@
     const { session } = noteFor;
     const note = String(text).trim();
     store.update(session.id, note ? { note, pendingNote: undefined } : { pendingNote: undefined });
+    writeDraft(''); // the jotted notes now live with the session
     noteFor = null;
+    renderLines();
     showView('timer');
     sync?.syncNow();
     refresh();
@@ -179,8 +187,9 @@
     if (isComplete()) $('#new-task').click();
   }
 
-  $('#save-note').addEventListener('click', () => { closeNote($('#note-text').value); freshTask(); });
-  $('#skip-note').addEventListener('click', () => { closeNote(); freshTask(); });
+  $('#save-note').addEventListener('click', () => { closeNote(noteText.value); freshTask(); });
+  // Skip adds nothing more, but never drops notes already typed (in the card, the timer or the pop-out).
+  $('#skip-note').addEventListener('click', () => { closeNote(noteText.value); freshTask(); });
   $('#same-again').addEventListener('click', () => {
     const complete = isComplete();
     const session = closeNote($('#note-text').value);
@@ -195,7 +204,72 @@
     else customForm.dispatchEvent(new Event('submit', { cancelable: true }));
     $('#start-stop').click();
   });
-  $('#note-text').addEventListener('keydown', (event) => { if (event.key === 'Escape') event.stopPropagation(); });
+  noteText.addEventListener('keydown', (event) => { if (event.key === 'Escape') event.stopPropagation(); });
+
+  // ---- Notes while the timer runs (Val 2026-11-19) ----
+  // One roomy box: type as much as you like (meetings too). Saved in this browser as you
+  // type (nothing lost on refresh) and handed to the note card when the session is logged;
+  // the session gives it its date, time and task. Notes written before Start go with the
+  // next session logged. The same box moves into the pop-out window.
+  const DRAFT_KEY = 'pomopal.web.liveNotes';
+  const liveNotes = $('#live-notes');
+  const liveInput = $('#live-note');
+
+  function readDraft() {
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY) || '';
+      if (raw.startsWith('[')) { const lines = JSON.parse(raw); return Array.isArray(lines) ? lines.join('\n') : ''; }
+      return raw;
+    } catch {
+      return '';
+    }
+  }
+
+  function writeDraft(text) {
+    try {
+      if (String(text).trim()) localStorage.setItem(DRAFT_KEY, text);
+      else localStorage.removeItem(DRAFT_KEY);
+    } catch { /* storage full or blocked: the text still shows until the page closes */ }
+  }
+
+  // While the note card is open, the box and the card hold the same text (so typing in the
+  // pop-out adds to the card).
+  function renderLines() {
+    const text = noteFor ? noteText.value : readDraft();
+    if (liveInput.value !== text) liveInput.value = text;
+  }
+
+  liveInput.addEventListener('input', () => {
+    if (noteFor) noteText.value = liveInput.value;
+    writeDraft(liveInput.value);
+  });
+  liveInput.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      event.stopPropagation(); // leaves the box; never resets the timer
+      liveInput.blur();
+    }
+  });
+  noteText.addEventListener('input', () => {
+    if (!noteFor) return;
+    writeDraft(noteText.value); // kept safe while the card is open
+    renderLines();
+  });
+
+  // N jumps to the notes box (when not already typing somewhere).
+  function notesKey(event, target) {
+    if (event.key !== 'n' && event.key !== 'N') return;
+    if (event.metaKey || event.ctrlKey || event.altKey || event.target?.closest?.('input, textarea, select, [contenteditable="true"]')) return;
+    if (!target) return;
+    event.preventDefault();
+    target.focus();
+    target.setSelectionRange(target.value.length, target.value.length);
+  }
+  document.addEventListener('keydown', (event) => {
+    if (document.body.classList.contains('mini')) return; // the box is in the pop-out
+    notesKey(event, view === 'timer' ? liveInput : view === 'note' ? noteText : null);
+  });
+  window.addEventListener('storage', (event) => { if (event.key === DRAFT_KEY && !noteFor) renderLines(); });
+  renderLines();
 
   // ---- Log screen (separate from the timer) ----
   let logPeriod = 'week';
@@ -240,6 +314,33 @@
     }
     button.textContent = ok ? 'Copied' : 'Could not copy';
     setTimeout(() => { button.textContent = 'Copy'; }, 1500);
+  }
+
+  // Editing a note in the Log (Val 2026-11-19). One entry at a time; the Log doesn't redraw
+  // underneath while you type.
+  let editingId = null;
+
+  function noteEditor(session) {
+    const box = el('div', { class: 'note-edit' });
+    const area = el('textarea', { maxlength: '4000', 'aria-label': `Note for ${session.activity}`, placeholder: 'Add a note' });
+    area.value = session.note || '';
+    const done = (save) => {
+      if (save) {
+        const note = area.value.trim();
+        store.update(session.id, { note: note || undefined });
+      }
+      editingId = null;
+      renderLog();
+    };
+    area.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') { event.stopPropagation(); done(false); }
+      if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); done(true); }
+    });
+    const actions = el('div', { class: 'links' });
+    actions.append(link('Cancel', () => done(false)), link('Save', () => done(true), 'strong'));
+    box.append(area, actions);
+    setTimeout(() => { area.focus(); area.setSelectionRange(area.value.length, area.value.length); }, 0);
+    return box;
   }
 
   function renderLog() {
@@ -305,7 +406,11 @@
         el('span', { class: 'm' }, `${s.durationMinutes} min`),
         el('span', { class: 'a' }, logCategory === 'all' ? `${s.activity} (${log.CATEGORIES[s.category]})` : s.activity),
       );
-      if (s.note) row.append(el('span', { class: 'note' }, s.note));
+      if (editingId === s.id) row.append(noteEditor(s));
+      else {
+        if (s.note) row.append(el('span', { class: 'note' }, s.note));
+        if (!s.pendingNote) row.append(link(s.note ? 'Edit note' : 'Add note', () => { editingId = s.id; renderLog(); }, 'edit-note'));
+      }
       entries.append(row);
     });
     if (!selected.length) entries.append(el('p', { class: 'empty' }, 'Nothing logged in this period yet.'));
@@ -317,7 +422,7 @@
   // Chrome and Edge keep it above other windows (Picture-in-Picture); other browsers get a
   // normal small window. The real mug and countdown move into it, so the shared app keeps
   // driving them exactly as in the Mac app's mini mode.
-  const popout = { win: null, moved: [], linksKey: '' };
+  const popout = { win: null, moved: [], linksKey: '', notesOpen: false, shortHeight: 0 };
   const exitMini = () => { if (document.body.classList.contains('mini')) $('#expand-toggle').click(); };
   $('#bring-back').addEventListener('click', exitMini);
 
@@ -326,22 +431,45 @@
     popout.moved = [];
     popout.win = null;
     popout.linksKey = '';
+    popout.notesOpen = false;
+    popout.shortHeight = 0;
   }
 
   function miniLinks() {
     const { status } = state;
     const press = (selector) => () => $(selector).click();
-    const addNote = () => { exitMini(); setTimeout(() => $('#note-text').focus(), 0); };
+    const notes = [popout.notesOpen ? 'Hide notes' : 'Notes', toggleNotes];
     const newTask = () => {
       if (noteFor) $('#skip-note').click(); else $('#new-task').click();
       exitMini();
       setTimeout(() => intention.focus(), 0);
     };
-    if (status === 'complete') return [['New task', newTask], ['Add note', addNote, 'strong'], ['Open', exitMini]];
-    if (status === 'running') return [['Pause', press('#start-stop')], ['Done', press('#log-time'), 'strong'], ['Open', exitMini]];
-    if (status === 'paused') return [['Resume', press('#start-stop')], ['Done', press('#log-time'), 'strong'], ['Open', exitMini]];
-    if (noteFor) return [['Add note', addNote, 'strong'], ['Open', exitMini]];
-    return timeEl.textContent === '00:00' ? [['Open', exitMini]] : [['Start', press('#start-stop')], ['Open', exitMini]];
+    if (status === 'complete') return [['New task', newTask], notes, ['Open', exitMini]];
+    if (status === 'running') return [['Pause', press('#start-stop')], ['Done', press('#log-time'), 'strong'], notes, ['Open', exitMini]];
+    if (status === 'paused') return [['Resume', press('#start-stop')], ['Done', press('#log-time'), 'strong'], notes, ['Open', exitMini]];
+    if (noteFor) return [notes, ['Open', exitMini]];
+    return timeEl.textContent === '00:00' ? [notes, ['Open', exitMini]] : [['Start', press('#start-stop')], notes, ['Open', exitMini]];
+  }
+
+  // Notes in the pop-out (Val 2026-11-19): a Notes link beside Open shows the notes box under
+  // the timer and makes the window taller; Hide notes puts it back to the size it was.
+  const NOTES_HEIGHT = 380;
+  function toggleNotes() {
+    const { win } = popout;
+    if (!win) return;
+    popout.notesOpen = !popout.notesOpen;
+    win.document.body.classList.toggle('notes-open', popout.notesOpen);
+    try {
+      if (popout.notesOpen && win.innerHeight < NOTES_HEIGHT) {
+        popout.shortHeight = win.innerHeight;
+        win.resizeBy(0, NOTES_HEIGHT - win.innerHeight);
+      } else if (!popout.notesOpen && popout.shortHeight) {
+        win.resizeBy(0, popout.shortHeight - win.innerHeight);
+        popout.shortHeight = 0;
+      }
+    } catch { /* the browser said no: drag the window taller instead */ }
+    syncPopout();
+    if (popout.notesOpen) setTimeout(() => { liveInput.focus(); liveInput.setSelectionRange(liveInput.value.length, liveInput.value.length); }, 0);
   }
 
   function syncPopout() {
@@ -379,17 +507,27 @@
     card.className = 'card mini-card';
     const row = doc.createElement('div');
     row.className = 'mini-row';
-    ['#mascot', '#time'].forEach((selector) => {
-      const node = $(selector);
+    const move = (node, parent) => {
       const marker = document.createComment('pomopal-popout');
       node.before(marker);
       popout.moved.push({ node, marker });
-      row.append(node);
-    });
+      parent.append(node);
+    };
+    ['#mascot', '#time'].forEach((selector) => move($(selector), row));
     const links = doc.createElement('div');
     links.className = 'links mini-links';
     card.append(row, links);
+    move(liveNotes, card); // under the timer; shows when the window is dragged taller
     doc.body.append(card);
+    renderLines();
+    // N in the pop-out opens the notes (or jumps into them when they're showing).
+    doc.addEventListener('keydown', (event) => {
+      if (popout.notesOpen) { notesKey(event, liveInput); return; }
+      if ((event.key === 'n' || event.key === 'N') && !event.metaKey && !event.ctrlKey && !event.altKey && !event.target?.closest?.('input, textarea')) {
+        event.preventDefault();
+        toggleNotes();
+      }
+    });
     const ticker = win.setInterval(() => state.catchUpNow?.(), 500);
     win.addEventListener('pagehide', () => {
       win.clearInterval(ticker);
@@ -517,7 +655,7 @@
       button.disabled = locked && !selected;
     });
     if (!suggestions.hidden) showSuggestions();
-    if (view === 'log') renderLog();
+    if (view === 'log' && !editingId) renderLog();
   }
 
   state.recordedListeners.push((result) => {

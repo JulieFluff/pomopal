@@ -174,12 +174,15 @@
   }
 
   // The list as plain text for copy and paste: one line per entry, newest first,
-  // columns separated by tabs so it also pastes into a spreadsheet.
+  // columns separated by tabs so it also pastes into a spreadsheet. A note with several
+  // lines is joined with " · " so each entry stays on one line.
   function toCopyText(sessions) {
     return sessions.slice().reverse()
-      .map((s) => [dayLabel(s.date), String(s.time).slice(0, 5), `${s.durationMinutes} min`, CATEGORIES[s.category], s.activity, s.note || ''].join('\t').replace(/\t+$/, ''))
+      .map((s) => [dayLabel(s.date), String(s.time).slice(0, 5), `${s.durationMinutes} min`, CATEGORIES[s.category], s.activity, oneLine(s.note)].join('\t').replace(/\t+$/, ''))
       .join('\n');
   }
+
+  const oneLine = (note) => String(note || '').split('\n').map((l) => l.trim()).filter(Boolean).join(' · ');
 
   function summaryFor(sessions, period, now = new Date()) {
     const selected = sessionsFor(sessions, period, now);

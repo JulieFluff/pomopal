@@ -42,6 +42,10 @@
       <button id="custom-toggle" class="text-link" type="button" aria-expanded="false">Custom</button>
     </div>
     <form id="custom-duration" class="custom-duration full-only" hidden><label for="custom-minutes">Minutes</label><input id="custom-minutes" type="number" min="1" max="180" step="1" inputmode="numeric" required><button type="submit" class="text-link strong">Set</button></form>
+    <!-- Notes while the timer runs (Val 2026-11-19). Moves into the pop-out with the time. -->
+    <div id="live-notes" class="live-notes">
+      <textarea id="live-note" maxlength="4000" placeholder="Notes… (N)" aria-label="Notes for this session"></textarea>
+    </div>
     <!-- The shared app's own "time's up" choices; the browser version uses the note card below instead. -->
     <div id="completion-actions" class="app-only" hidden><span id="completed-task"></span><button id="continue-task" type="button">Continue</button><button id="new-task" type="button">New task</button><button id="expand-toggle" type="button">Back</button><input id="always-on-top" type="checkbox"></div>
   </section>
@@ -54,7 +58,7 @@
     <p id="note-title" class="note-title"></p>
     <p id="note-sub" class="note-sub"></p>
     <label for="note-text">Add a note (optional)</label>
-    <textarea id="note-text" maxlength="1000"></textarea>
+    <textarea id="note-text" maxlength="4000"></textarea>
     <button id="save-note" class="primary" type="button">Save note</button>
     <div class="links"><button id="skip-note" class="text-link" type="button">Skip</button><button id="same-again" class="text-link" type="button">Same task again</button></div>
   </section>
