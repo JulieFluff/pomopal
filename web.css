@@ -159,6 +159,9 @@ body.web-popout.asking-task .mini-links { display: none; }
 .web-login button { min-height: 36px; border-radius: 999px; background: var(--accent); color: var(--onaccent); font-weight: 600; }
 .web-login-note { min-height: 1em; color: var(--ink); }
 
+/* Version in the footer, so Val can see which build is open (Val 2026-11-19) */
+.app-version { margin: 14px 0 0; font-size: 11px; color: var(--muted); text-align: center; letter-spacing: .04em; }
+
 /* Pop-out: the main page shows a short note while the timer is popped out */
 .web-popped { margin-top: 40px; color: var(--muted); font-size: 13px; text-align: center; }
 
