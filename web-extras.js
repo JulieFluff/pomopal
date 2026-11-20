@@ -125,6 +125,35 @@
     }
   });
 
+  // ---- No Start without a task (Val 2026-11-19) ----
+  // Start (button, Space, or the pop-out) asks for the task first instead of logging an
+  // "Unspecified activity". Resume, Continue and Same task again are not affected.
+  const taskNeeded = $('#task-needed');
+  const needsTask = () => state.status === 'ready' && !intention.value.trim();
+  function askForTask() {
+    taskNeeded.hidden = false;
+    intention.setAttribute('aria-invalid', 'true');
+    intention.focus();
+  }
+  document.addEventListener('click', (event) => {
+    if (!event.target?.closest?.('#start-stop') || !needsTask()) return;
+    event.stopImmediatePropagation();
+    event.preventDefault();
+    if (document.body.classList.contains('mini')) askInPopout(); else askForTask();
+  }, true);
+  window.addEventListener('keydown', (event) => {
+    if (event.code !== 'Space' || !needsTask() || document.body.classList.contains('mini')) return;
+    if (event.target?.closest?.('input, select, textarea, button, [role="button"]')) return;
+    event.stopImmediatePropagation();
+    event.preventDefault();
+    askForTask();
+  }, true);
+  intention.addEventListener('input', () => {
+    if (!intention.value.trim()) return;
+    taskNeeded.hidden = true;
+    intention.removeAttribute('aria-invalid');
+  });
+
   // ---- Custom minutes: a quiet "Custom" link opens the small box ----
   const customForm = $('#custom-duration');
   $('#custom-toggle').addEventListener('click', () => {
@@ -433,6 +462,7 @@
     popout.linksKey = '';
     popout.notesOpen = false;
     popout.shortHeight = 0;
+    popout.taskInput = null;
   }
 
   function miniLinks() {
@@ -454,6 +484,13 @@
   // Notes in the pop-out (Val 2026-11-19): a Notes link beside Open shows the notes box under
   // the timer and makes the window taller; Hide notes puts it back to the size it was.
   const NOTES_HEIGHT = 380;
+  function askInPopout() {
+    const { win, taskInput } = popout;
+    if (!win || !taskInput) return;
+    win.document.body.classList.add('asking-task');
+    taskInput.focus();
+  }
+
   function toggleNotes() {
     const { win } = popout;
     if (!win) return;
@@ -517,7 +554,34 @@
     const links = doc.createElement('div');
     links.className = 'links mini-links';
     card.append(row, links);
-    move(liveNotes, card); // under the timer; shows when the window is dragged taller
+    // Start with no task: a one-line task box takes the links' place; Return starts.
+    const task = doc.createElement('div');
+    task.className = 'mini-task';
+    const taskInput = doc.createElement('input');
+    taskInput.maxLength = 120;
+    taskInput.autocomplete = 'off';
+    taskInput.placeholder = 'What are you working on? ↵';
+    taskInput.setAttribute('aria-label', 'What are you working on? Press Return to start');
+    taskInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' && !event.isComposing) {
+        event.preventDefault();
+        const text = taskInput.value.trim();
+        if (!text) { taskInput.setAttribute('aria-invalid', 'true'); return; }
+        intention.value = text;
+        intention.dispatchEvent(new Event('input', { bubbles: true }));
+        doc.body.classList.remove('asking-task');
+        taskInput.value = '';
+        taskInput.removeAttribute('aria-invalid');
+        $('#start-stop').click();
+      } else if (event.key === 'Escape') {
+        doc.body.classList.remove('asking-task');
+        taskInput.removeAttribute('aria-invalid');
+      }
+    });
+    task.append(taskInput);
+    card.append(task);
+    popout.taskInput = taskInput;
+    move(liveNotes, card); // under the timer; shows with the Notes link
     doc.body.append(card);
     renderLines();
     // N in the pop-out opens the notes (or jumps into them when they're showing).
