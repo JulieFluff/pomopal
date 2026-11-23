@@ -81,15 +81,46 @@
     return /[",\n\r]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
   }
 
-  function toCsv(sessions, category) {
-    const rows = inCategory(sessions, category)
-      .map((s) => [s.date, s.time, CATEGORIES[s.category], s.activity, s.durationMinutes, s.note || ''].map(csvCell).join(','));
-    return `date,time,category,work,duration_minutes,note\n${rows.map((r) => `${r}\n`).join('')}`;
+  // Web links in a note (Val 2026-11-23): shown clickable in the Log, and as clickable
+  // columns in the spreadsheet.
+  function linksIn(text) {
+    return [...String(text || '').matchAll(/https?:\/\/[^\s<>"]+/g)].map((m) => m[0].replace(/[).,;:!?'\]]+$/, ''));
   }
 
-  function exportFileName(category, today = new Date()) {
+  // Excel and Google Sheets show =HYPERLINK as a clickable link. A cell holds one link, so
+  // each link gets its own column, and the columns only appear when a note has a link.
+  function toCsv(sessions, category) {
+    const list = inCategory(sessions, category);
+    const links = list.map((s) => linksIn(s.note));
+    const most = Math.max(0, ...links.map((l) => l.length));
+    const extra = Array.from({ length: most }, (_, i) => `,link_${i + 1}`).join('');
+    const rows = list.map((s, i) => [
+      s.date, s.time, CATEGORIES[s.category], s.activity, s.durationMinutes, s.note || '',
+      ...Array.from({ length: most }, (_, n) => (links[i][n] ? `=HYPERLINK("${links[i][n].replaceAll('"', '%22')}")` : '')),
+    ].map(csvCell).join(','));
+    return `date,time,category,work,duration_minutes,note${extra}\n${rows.map((r) => `${r}\n`).join('')}`;
+  }
+
+  function exportFileName(category, today = new Date(), ext = 'csv') {
     const label = category === 'personal' ? 'Personal' : category === 'all' ? 'All' : 'Work';
-    return `PomoPal_${label}_${localParts(today).date}.csv`;
+    return `PomoPal_${label}_${localParts(today).date}.${ext}`;
+  }
+
+  // Markdown for Obsidian and AI tools (Val 2026-11-23): a heading per day, one per session,
+  // oldest first, notes as written.
+  function toMarkdown(sessions, { category = 'dayjob', period = 'week', now = new Date() } = {}) {
+    const list = inCategory(sessions, category);
+    const which = category === 'all' ? 'All' : CATEGORIES[category];
+    const lines = [`# PomoPal · ${which} · ${rangeLabel(period, now)}${period === 'week' ? ` ${now.getFullYear()}` : ''}`, '',
+      `Total ${formatDuration(minutesOf(list))} · ${list.length} ${list.length === 1 ? 'session' : 'sessions'}`];
+    let day = '';
+    list.forEach((s) => {
+      if (s.date !== day) { day = s.date; lines.push('', `## ${dayLabel(s.date)} ${String(s.date).slice(0, 4)}`); }
+      const tag = category === 'all' ? ` · ${CATEGORIES[s.category]}` : '';
+      lines.push('', `### ${String(s.time).slice(0, 5)} · ${s.activity} (${s.durationMinutes} min${tag})`);
+      if (s.note) lines.push('', String(s.note).trim());
+    });
+    return `${lines.join('\n')}\n`;
   }
 
   function weekStart(now) {
@@ -103,20 +134,23 @@
     if (period === 'today') return sessions.filter((s) => s.date === today);
     if (period === 'month') return sessions.filter((s) => s.date?.slice(0, 7) === today.slice(0, 7));
     if (period === 'year') return sessions.filter((s) => s.date?.slice(0, 4) === today.slice(0, 4));
-    const first = localParts(weekStart(now)).date;
-    return sessions.filter((s) => s.date >= first && s.date <= today);
+    const start = weekStart(now);
+    const first = localParts(start).date;
+    const last = localParts(new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6)).date;
+    return sessions.filter((s) => s.date >= first && s.date <= last);
   }
 
   const minutesOf = (list) => list.reduce((total, s) => total + (Number(s.durationMinutes) || 0), 0);
 
   // Bars for the Log screen: a bar per day of the week or month, or per month of the year.
-  function chartFor(sessions, period, now = new Date()) {
+  function chartFor(sessions, period, now = new Date(), today = now) {
+    const todayDate = localParts(today).date;
     if (period === 'week') {
       const start = weekStart(now);
       return 'MTWTFSS'.split('').map((label, i) => {
         const day = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
         const date = localParts(day).date;
-        return { label, minutes: minutesOf(sessions.filter((s) => s.date === date)), current: date === localParts(now).date };
+        return { label, minutes: minutesOf(sessions.filter((s) => s.date === date)), current: date === todayDate };
       });
     }
     if (period === 'month') {
@@ -124,14 +158,14 @@
       const month = localParts(now).date.slice(0, 7);
       return Array.from({ length: days }, (_, i) => {
         const date = `${month}-${String(i + 1).padStart(2, '0')}`;
-        return { label: (i + 1) % 7 === 1 ? String(i + 1) : '', minutes: minutesOf(sessions.filter((s) => s.date === date)), current: i + 1 === now.getDate() };
+        return { label: (i + 1) % 7 === 1 ? String(i + 1) : '', minutes: minutesOf(sessions.filter((s) => s.date === date)), current: `${month}-${String(i + 1).padStart(2, '0')}` === todayDate };
       });
     }
     if (period === 'year') {
       const year = String(now.getFullYear());
       return 'JFMAMJJASOND'.split('').map((label, i) => {
         const month = `${year}-${String(i + 1).padStart(2, '0')}`;
-        return { label, minutes: minutesOf(sessions.filter((s) => s.date?.slice(0, 7) === month)), current: i === now.getMonth() };
+        return { label, minutes: minutesOf(sessions.filter((s) => s.date?.slice(0, 7) === month)), current: month === todayDate.slice(0, 7) };
       });
     }
     return [];
@@ -147,6 +181,15 @@
       totals.set(key, entry);
     });
     return [...totals.values()].sort((a, b) => b.minutes - a.minutes).slice(0, limit);
+  }
+
+  // The day, week, month or year `offset` steps back from now (0 = the current one).
+  function periodDate(period, offset = 0, now = new Date()) {
+    const y = now.getFullYear(); const m = now.getMonth(); const d = now.getDate();
+    if (period === 'today') return new Date(y, m, d - offset);
+    if (period === 'month') return new Date(y, m - offset, 1);
+    if (period === 'year') return new Date(y - offset, 0, 1);
+    return new Date(y, m, d - 7 * offset);
   }
 
   function formatDuration(minutes) {
@@ -183,6 +226,67 @@
   }
 
   const oneLine = (note) => String(note || '').split('\n').map((l) => l.trim()).filter(Boolean).join(' · ');
+
+  // ---- Importing a spreadsheet: the Mac app's pomopal_sessions.csv or this log's own download ----
+  function parseCsv(text) {
+    const rows = []; let row = []; let cell = ''; let quoted = false;
+    const src = String(text || '').replace(/^\uFEFF/, '');
+    for (let i = 0; i < src.length; i += 1) {
+      const c = src[i];
+      if (quoted) {
+        if (c === '"' && src[i + 1] === '"') { cell += '"'; i += 1; } else if (c === '"') quoted = false; else cell += c;
+      } else if (c === '"') quoted = true;
+      else if (c === ',') { row.push(cell); cell = ''; } else if (c === '\n' || c === '\r') {
+        if (c === '\r' && src[i + 1] === '\n') i += 1;
+        row.push(cell); rows.push(row); row = []; cell = '';
+      } else cell += c;
+    }
+    if (cell || row.length) { row.push(cell); rows.push(row); }
+    return rows.filter((r) => r.some((c) => c.trim()));
+  }
+
+  // The same session always gets the same id, so importing a file twice adds nothing twice.
+  function stableId(key) {
+    const hex = [0x811c9dc5, 0x01000193, 0x9e3779b9, 0x85ebca6b].map((seed) => {
+      let h = seed >>> 0;
+      for (let i = 0; i < key.length; i += 1) { h ^= key.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; h = (h ^ (h >>> 13)) >>> 0; }
+      return h.toString(16).padStart(8, '0');
+    }).join('');
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20)}`;
+  }
+
+  const sameSession = (s) => `${s.date}|${s.time}|${String(s.activity).trim().toLowerCase()}`;
+
+  // Reads the file and returns the sessions not already in `existing`. Rows without a category
+  // use `category`, or Work when the task contains one of `workWords`.
+  function importCsv(text, { existing = [], category = 'personal', workWords = [] } = {}) {
+    const [header = [], ...rows] = parseCsv(text);
+    const col = (...names) => header.findIndex((h) => names.includes(h.trim().toLowerCase()));
+    const at = { date: col('date'), time: col('time'), task: col('work', 'activity', 'task'), minutes: col('duration_minutes', 'minutes'), category: col('category'), note: col('note') };
+    if (at.date < 0 || at.time < 0 || at.task < 0 || at.minutes < 0) return { error: 'This file does not look like a PomoPal log (it needs date, time, work and duration_minutes columns).' };
+    const words = workWords.map((w) => w.trim().toLowerCase()).filter(Boolean);
+    const have = new Set(existing.map(sameSession));
+    const ids = new Set(existing.map((s) => s.id));
+    const sessions = []; let skipped = 0; let bad = 0;
+    rows.forEach((r) => {
+      const date = (r[at.date] || '').trim(); const time = (r[at.time] || '').trim();
+      const activity = (r[at.task] || '').trim() || 'Unspecified activity';
+      const durationMinutes = Number(r[at.minutes]);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d{2}:\d{2}(:\d{2})?$/.test(time) || !(durationMinutes > 0)) { bad += 1; return; }
+      const fullTime = time.length === 5 ? `${time}:00` : time;
+      const label = at.category >= 0 ? (r[at.category] || '').trim().toLowerCase() : '';
+      const cat = label === 'work' || label === 'day job' ? 'dayjob' : label === 'personal' ? 'personal'
+        : words.some((w) => activity.toLowerCase().includes(w)) ? 'dayjob' : category;
+      const [y, mo, d] = date.split('-').map(Number); const [h, mi, se = 0] = fullTime.split(':').map(Number);
+      const session = { id: stableId(`pomopal-import|${date}|${fullTime}|${activity}`), completedAt: new Date(y, mo - 1, d, h, mi, se).toISOString(), date, time: fullTime, category: cat, activity, durationMinutes };
+      const note = at.note >= 0 ? (r[at.note] || '').trim() : '';
+      if (note) session.note = note;
+      if (have.has(sameSession(session)) || ids.has(session.id)) { skipped += 1; return; }
+      have.add(sameSession(session)); ids.add(session.id);
+      sessions.push(session);
+    });
+    return { sessions, skipped, bad };
+  }
 
   function summaryFor(sessions, period, now = new Date()) {
     const selected = sessionsFor(sessions, period, now);
@@ -242,6 +346,12 @@
         write(merged);
         return fresh.length;
       },
+      // Adds imported sessions in time order.
+      addMany(list) {
+        const merged = [...read(), ...list].sort((a, b) => String(a.completedAt).localeCompare(String(b.completedAt)));
+        write(merged);
+        return list.length;
+      },
       clear: () => storage.removeItem(STORAGE_KEY),
     };
   }
@@ -249,6 +359,7 @@
   const exportsObject = {
     STORAGE_KEY, CATEGORIES, normaliseCategory, parseSessions, newId, createSession, recentTasks, matchTasks, inCategory, toCsv, exportFileName, sessionsFor, summaryFor, createStore,
     chartFor, topTasks, formatDuration, dayLabel, rangeLabel, toCopyText,
+    linksIn, toMarkdown, periodDate, parseCsv, stableId, importCsv,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = exportsObject;
   globalScope.PomoWebLog = exportsObject;

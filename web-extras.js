@@ -176,6 +176,7 @@
     $('#note-card').hidden = next !== 'note';
     $('#log-view').hidden = next !== 'log';
     editingId = null;
+    importing = null;
     if (next === 'log') renderLog();
   }
 
@@ -302,11 +303,12 @@
 
   // ---- Log screen (separate from the timer) ----
   let logPeriod = 'week';
+  let logOffset = 0; // 0 = this day/week/month/year, 1 = the one before, and so on
   let logCategory = state.category;
   const logBody = el('div', { class: 'log-body' });
   const online = el('div', { class: 'web-online' });
   $('#log-view').append(logBody, online);
-  $('#open-log').addEventListener('click', () => { logCategory = state.category; showView('log'); });
+  $('#open-log').addEventListener('click', () => { logCategory = state.category; logOffset = 0; showView('log'); });
 
   function seg(items, current, onPick, label) {
     const row = el('div', { class: 'seg', role: 'group', 'aria-label': label });
@@ -319,9 +321,8 @@
     return row;
   }
 
-  function download(sessions) {
-    const csv = log.toCsv(sessions, logCategory);
-    const a = el('a', { href: URL.createObjectURL(new Blob([csv], { type: 'text/csv' })), download: log.exportFileName(logCategory) });
+  function download(text, type, name) {
+    const a = el('a', { href: URL.createObjectURL(new Blob([text], { type })), download: name });
     document.body.append(a);
     a.click();
     a.remove();
@@ -351,7 +352,7 @@
 
   function noteEditor(session) {
     const box = el('div', { class: 'note-edit' });
-    const area = el('textarea', { maxlength: '4000', 'aria-label': `Note for ${session.activity}`, placeholder: 'Add a note' });
+    const area = el('textarea', { 'aria-label': `Note for ${session.activity}`, placeholder: 'Add a note' });
     area.value = session.note || '';
     const done = (save) => {
       if (save) {
@@ -372,8 +373,87 @@
     return box;
   }
 
+  // A note with its web links clickable (they open in a new tab).
+  function noteWithLinks(text) {
+    const span = el('span', { class: 'note' });
+    let rest = String(text);
+    log.linksIn(rest).forEach((url) => {
+      const at = rest.indexOf(url);
+      span.append(rest.slice(0, at), el('a', { href: url, target: '_blank', rel: 'noopener noreferrer' }, url));
+      rest = rest.slice(at + url.length);
+    });
+    span.append(rest);
+    return span;
+  }
+
+  // ---- Import the Mac app's log (or a downloaded spreadsheet) (Val 2026-11-23) ----
+  let importing = null; // { name, text } while the import panel is open
+  const importPicker = el('input', { type: 'file', accept: '.csv,text/csv', hidden: '' });
+  document.body.append(importPicker);
+  importPicker.addEventListener('change', async () => {
+    const file = importPicker.files?.[0];
+    importPicker.value = '';
+    if (!file) return;
+    importing = { name: file.name, text: await file.text(), category: 'personal', words: '' };
+    renderLog();
+  });
+
+  function importPanel() {
+    const box = el('div', { class: 'import-box' });
+    const words = () => importing.words.split(',');
+    const result = log.importCsv(importing.text, { existing: store.all(), category: importing.category, workWords: words() });
+    const close = () => { importing = null; renderLog(); };
+    box.append(el('p', { class: 'import-title' }, `Import ${importing.name}`));
+    if (result.error) {
+      box.append(el('p', {}, result.error));
+      const actions = el('div', { class: 'links' });
+      actions.append(link('Close', close));
+      box.append(actions);
+      return box;
+    }
+    const found = result.sessions;
+    const dates = found.map((x) => x.date).sort();
+    const work = found.filter((x) => x.category === 'dayjob').length;
+    box.append(el('p', {}, found.length
+      ? `${found.length} new ${found.length === 1 ? 'session' : 'sessions'}, ${log.dayLabel(dates[0])} ${dates[0].slice(0, 4)} – ${log.dayLabel(dates[dates.length - 1])} ${dates[dates.length - 1].slice(0, 4)}.`
+      : 'Nothing new to add: everything in this file is already in your log.'));
+    if (result.skipped) box.append(el('p', { class: 'muted' }, `${result.skipped} already in your log, so they're skipped.`));
+    if (found.length) {
+      box.append(el('p', { class: 'muted' }, 'Sessions without Work or Personal go in:'));
+      const cats = seg([['personal', 'Personal'], ['dayjob', 'Work']], importing.category, (key) => { importing.category = key; }, 'Import into');
+      const label = el('label', { for: 'import-words' }, 'Work instead, if the task contains (separate with commas):');
+      const input = el('input', { id: 'import-words', autocomplete: 'off', placeholder: 'e.g. scrum, reporting, meeting' });
+      input.value = importing.words;
+      const count = el('p', { class: 'muted' }, `${work} Work · ${found.length - work} Personal`);
+      input.addEventListener('input', () => {
+        importing.words = input.value;
+        const now = log.importCsv(importing.text, { existing: store.all(), category: importing.category, workWords: words() }).sessions;
+        const w = now.filter((x) => x.category === 'dayjob').length;
+        count.textContent = `${w} Work · ${now.length - w} Personal`;
+      });
+      box.append(cats, label, input, count);
+    }
+    const actions = el('div', { class: 'links' });
+    actions.append(link('Cancel', close));
+    if (found.length) {
+      actions.append(link(`Import ${found.length}`, () => {
+        const latest = log.importCsv(importing.text, { existing: store.all(), category: importing.category, workWords: words() }).sessions;
+        store.addMany(latest);
+        importing = null;
+        logOffset = 0;
+        renderLog();
+        sync?.syncNow?.();
+      }, 'strong'));
+    }
+    box.append(actions);
+    return box;
+  }
+
   function renderLog() {
-    const selected = log.sessionsFor(log.inCategory(store.all(), logCategory), logPeriod);
+    if (importing) { logBody.replaceChildren(importPanel()); return; }
+    const now = new Date();
+    const shown = log.periodDate(logPeriod, logOffset, now);
+    const selected = log.sessionsFor(log.inCategory(store.all(), logCategory), logPeriod, shown);
     const minutes = selected.reduce((total, s) => total + (Number(s.durationMinutes) || 0), 0);
 
     const head = el('div', { class: 'log-head' });
@@ -381,8 +461,8 @@
 
     const rangeRow = el('div', { class: 'log-row' });
     rangeRow.append(
-      seg([['today', 'D'], ['week', 'W'], ['month', 'M'], ['year', 'Y']], logPeriod, (key) => { logPeriod = key; }, 'Period'),
-      el('span', { class: 'range' }, log.rangeLabel(logPeriod)),
+      seg([['today', 'D'], ['week', 'W'], ['month', 'M'], ['year', 'Y']], logPeriod, (key) => { logPeriod = key; logOffset = 0; }, 'Period'),
+      stepper(log.rangeLabel(logPeriod, shown)),
     );
     const cats = seg([['dayjob', 'Work'], ['personal', 'Personal'], ['all', 'All']], logCategory, (key) => { logCategory = key; }, 'Which log');
     cats.classList.add('log-cats');
@@ -391,7 +471,7 @@
     total.append(el('small', {}, `${selected.length} ${selected.length === 1 ? 'session' : 'sessions'}`));
 
     const parts = [head, rangeRow, cats, total];
-    const chart = log.chartFor(selected, logPeriod);
+    const chart = log.chartFor(selected, logPeriod, shown, now);
     if (chart.length) {
       const most = Math.max(1, ...chart.map((b) => b.minutes));
       const bars = el('div', { class: 'days', 'aria-hidden': 'true' });
@@ -422,9 +502,12 @@
     const listHead = el('div', { class: 'listhead' });
     const actions = el('span', { class: 'act' });
     const copy = link('Copy', () => copyText(log.toCopyText(selected), copy));
-    const save = link('Download spreadsheet', () => download(selected));
-    copy.disabled = save.disabled = !selected.length;
-    actions.append(copy, save);
+    const save = link('Spreadsheet', () => download(log.toCsv(selected, logCategory), 'text/csv', log.exportFileName(logCategory, shown)));
+    const md = link('Markdown', () => download(log.toMarkdown(selected, { category: logCategory, period: logPeriod, now: shown }), 'text/markdown', log.exportFileName(logCategory, shown, 'md')));
+    save.title = 'Download a spreadsheet (CSV) of this list';
+    md.title = 'Download this list as Markdown, for Obsidian or AI tools';
+    copy.disabled = save.disabled = md.disabled = !selected.length;
+    actions.append(copy, save, md);
     listHead.append(el('span', {}, 'List'), actions);
 
     const entries = el('div', { class: 'list' });
@@ -437,14 +520,34 @@
       );
       if (editingId === s.id) row.append(noteEditor(s));
       else {
-        if (s.note) row.append(el('span', { class: 'note' }, s.note));
+        if (s.note) row.append(noteWithLinks(s.note));
         if (!s.pendingNote) row.append(link(s.note ? 'Edit note' : 'Add note', () => { editingId = s.id; renderLog(); }, 'edit-note'));
       }
       entries.append(row);
     });
     if (!selected.length) entries.append(el('p', { class: 'empty' }, 'Nothing logged in this period yet.'));
     parts.push(listHead, entries);
+    const more = el('p', { class: 'log-more' });
+    more.append(link('Import a log…', () => importPicker.click()));
+    more.lastChild.title = "Add sessions from the Mac app's pomopal_sessions.csv or a PomoPal spreadsheet";
+    parts.push(more);
     logBody.replaceChildren(...parts);
+  }
+
+  // ‹ 16 Nov – 22 Nov ›  Click the dates to come back to now.
+  function stepper(label) {
+    const box = el('span', { class: 'range' });
+    const names = { today: 'day', week: 'week', month: 'month', year: 'year' };
+    const back = el('button', { type: 'button', class: 'step', 'aria-label': `Previous ${names[logPeriod]}` }, '‹');
+    const dates = el('button', { type: 'button', class: 'range-label', title: logOffset ? 'Back to now' : '' }, label);
+    const next = el('button', { type: 'button', class: 'step', 'aria-label': `Next ${names[logPeriod]}` }, '›');
+    next.disabled = logOffset === 0;
+    dates.disabled = logOffset === 0;
+    back.addEventListener('click', () => { logOffset += 1; renderLog(); });
+    next.addEventListener('click', () => { logOffset = Math.max(0, logOffset - 1); renderLog(); });
+    dates.addEventListener('click', () => { logOffset = 0; renderLog(); });
+    box.append(back, dates, next);
+    return box;
   }
 
   // ---- Pop-out timer: the mug and countdown in a small window ----
@@ -719,7 +822,7 @@
       button.disabled = locked && !selected;
     });
     if (!suggestions.hidden) showSuggestions();
-    if (view === 'log' && !editingId) renderLog();
+    if (view === 'log' && !editingId && !importing) renderLog();
   }
 
   state.recordedListeners.push((result) => {
