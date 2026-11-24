@@ -3,8 +3,8 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self' https://*.supabase.co">
-  <title>Focus</title><link rel="icon" href="assets/icons/mug.svg"><link rel="stylesheet" href="web.css?v=v10">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self' https://*.supabase.co">
+  <title>Focus</title><link rel="icon" href="assets/icons/mug.svg"><link rel="stylesheet" href="web.css?v=v11">
 </head>
 <body class="web">
 <!-- Browser version (work look, locked design docs/PomoPal_work-look-mockup.html, Val 2026-11-18).
@@ -45,7 +45,7 @@
     <form id="custom-duration" class="custom-duration full-only" hidden><label for="custom-minutes">Minutes</label><input id="custom-minutes" type="number" min="1" max="180" step="1" inputmode="numeric" required><button type="submit" class="text-link strong">Set</button></form>
     <!-- Notes while the timer runs (Val 2026-11-19). Moves into the pop-out with the time. -->
     <div id="live-notes" class="live-notes">
-      <textarea id="live-note" placeholder="Notes… (N)" aria-label="Notes for this session"></textarea>
+      <div id="live-note" data-placeholder="Notes… (N)" aria-label="Notes for this session"></div>
     </div>
     <!-- The shared app's own "time's up" choices; the browser version uses the note card below instead. -->
     <div id="completion-actions" class="app-only" hidden><span id="completed-task"></span><button id="continue-task" type="button">Continue</button><button id="new-task" type="button">New task</button><button id="expand-toggle" type="button">Back</button><input id="always-on-top" type="checkbox"></div>
@@ -58,8 +58,8 @@
     </p>
     <p id="note-title" class="note-title"></p>
     <p id="note-sub" class="note-sub"></p>
-    <label for="note-text">Add a note (optional)</label>
-    <textarea id="note-text"></textarea>
+    <label for="note-text" id="note-text-label">Add a note (optional)</label>
+    <div id="note-text" aria-labelledby="note-text-label"></div>
     <button id="save-note" class="primary" type="button">Save note</button>
     <div class="links"><button id="skip-note" class="text-link" type="button">Skip</button><button id="same-again" class="text-link" type="button">Same task again</button></div>
   </section>
@@ -68,10 +68,10 @@
 
   <p class="web-popped mini-only">The timer is in the pop-out window · <button id="bring-back" class="text-link" type="button">Bring it back</button></p>
   <!-- Version: the build script writes the build's version here (Val 2026-11-19). -->
-  <p id="app-version" class="app-version">v10 · 23 Nov 2026</p>
+  <p id="app-version" class="app-version">v11 · 24 Nov 2026</p>
 </main>
 <dialog id="settings-dialog" aria-label="Settings">
   <form method="dialog"><select id="finish-sound" aria-label="Finish sound"><option value="random">Surprise me</option><option value="bright">Bright</option><option value="gentle">Gentle</option><option value="sparkle">Sparkle</option></select></form>
 </dialog>
-<script src="renderer/timer-model.js?v=v10"></script><script src="renderer/finish-sounds.js?v=v10"></script><script src="renderer/preferences.js?v=v10"></script><script src="web-log.js?v=v10"></script><script src="web-bridge.js?v=v10"></script><script src="renderer/app.js?v=v10"></script><script src="web-config.js?v=v10"></script><script src="web-sync.js?v=v10"></script><script src="web-extras.js?v=v10"></script>
+<script src="renderer/timer-model.js?v=v11"></script><script src="renderer/finish-sounds.js?v=v11"></script><script src="renderer/preferences.js?v=v11"></script><script src="web-log.js?v=v11"></script><script src="web-notes.js?v=v11"></script><script src="web-bridge.js?v=v11"></script><script src="renderer/app.js?v=v11"></script><script src="web-config.js?v=v11"></script><script src="web-sync.js?v=v11"></script><script src="web-extras.js?v=v11"></script>
 </body></html>

@@ -84,18 +84,48 @@
   // Web links in a note (Val 2026-11-23): shown clickable in the Log, and as clickable
   // columns in the spreadsheet.
   function linksIn(text) {
-    return [...String(text || '').matchAll(/https?:\/\/[^\s<>"]+/g)].map((m) => m[0].replace(/[).,;:!?'\]]+$/, ''));
+    return [...String(text || '').matchAll(/https?:\/\/[^\s<>"]+/g)].map((m) => m[0].replace(/[).,;:!?'\]*]+$/, ''));
+  }
+
+  // Formatted notes (Val 2026-11-24) are kept as plain text with light Markdown:
+  // **bold**, <u>underline</u> and "- " bullets. Old plain notes need no change, Markdown
+  // exports keep the formatting, and Copy and the spreadsheet get clean text.
+  const BULLET = /^\s*[-*•]\s(.*)$/;
+  const escapeHtml = (text) => text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+  const inlineHtml = (line) => escapeHtml(line)
+    .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+    .replace(/&lt;u&gt;(.+?)&lt;\/u&gt;/g, '<u>$1</u>');
+
+  function noteToHtml(text) {
+    const lines = String(text || '').split('\n');
+    if (!String(text || '')) return '';
+    let html = ''; let inList = false;
+    lines.forEach((line) => {
+      const bullet = line.match(BULLET);
+      if (bullet && !inList) { html += '<ul>'; inList = true; }
+      if (!bullet && inList) { html += '</ul>'; inList = false; }
+      html += bullet ? `<li>${inlineHtml(bullet[1]) || '<br>'}</li>` : `<div>${inlineHtml(line) || '<br>'}</div>`;
+    });
+    return inList ? `${html}</ul>` : html;
+  }
+
+  function noteToPlain(text) {
+    return String(text || '').split('\n').map((line) => {
+      const bullet = line.match(BULLET);
+      const body = (bullet ? bullet[1] : line).replace(/\*\*(.+?)\*\*/g, '$1').replace(/<u>(.+?)<\/u>/g, '$1');
+      return bullet ? `• ${body}` : body;
+    }).join('\n');
   }
 
   // Excel and Google Sheets show =HYPERLINK as a clickable link. A cell holds one link, so
   // each link gets its own column, and the columns only appear when a note has a link.
   function toCsv(sessions, category) {
     const list = inCategory(sessions, category);
-    const links = list.map((s) => linksIn(s.note));
+    const links = list.map((s) => linksIn(noteToPlain(s.note)));
     const most = Math.max(0, ...links.map((l) => l.length));
     const extra = Array.from({ length: most }, (_, i) => `,link_${i + 1}`).join('');
     const rows = list.map((s, i) => [
-      s.date, s.time, CATEGORIES[s.category], s.activity, s.durationMinutes, s.note || '',
+      s.date, s.time, CATEGORIES[s.category], s.activity, s.durationMinutes, noteToPlain(s.note),
       ...Array.from({ length: most }, (_, n) => (links[i][n] ? `=HYPERLINK("${links[i][n].replaceAll('"', '%22')}")` : '')),
     ].map(csvCell).join(','));
     return `date,time,category,work,duration_minutes,note${extra}\n${rows.map((r) => `${r}\n`).join('')}`;
@@ -225,7 +255,7 @@
       .join('\n');
   }
 
-  const oneLine = (note) => String(note || '').split('\n').map((l) => l.trim()).filter(Boolean).join(' · ');
+  const oneLine = (note) => noteToPlain(note).split('\n').map((l) => l.trim()).filter(Boolean).join(' · ');
 
   // ---- Importing a spreadsheet: the Mac app's pomopal_sessions.csv or this log's own download ----
   function parseCsv(text) {
@@ -359,7 +389,7 @@
   const exportsObject = {
     STORAGE_KEY, CATEGORIES, normaliseCategory, parseSessions, newId, createSession, recentTasks, matchTasks, inCategory, toCsv, exportFileName, sessionsFor, summaryFor, createStore,
     chartFor, topTasks, formatDuration, dayLabel, rangeLabel, toCopyText,
-    linksIn, toMarkdown, periodDate, parseCsv, stableId, importCsv,
+    linksIn, noteToHtml, noteToPlain, toMarkdown, periodDate, parseCsv, stableId, importCsv,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = exportsObject;
   globalScope.PomoWebLog = exportsObject;

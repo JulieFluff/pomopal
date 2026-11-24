@@ -10,6 +10,7 @@
   const intention = $('#intention');
   const timeEl = $('#time'); // kept: it moves into the pop-out window and back
   const isComplete = () => document.body.classList.contains('timer-complete');
+  const notes = window.PomoNotes;
 
   function el(tag, attributes = {}, text = '') {
     const node = document.createElement(tag);
@@ -62,9 +63,45 @@
     $('#web-status').textContent = STATUS[status] || 'Ready';
     $('#progress-bar').style.width = `${(done * 100).toFixed(2)}%`;
     $('#done-hint').hidden = status !== 'running' && status !== 'paused';
-    document.title = status === 'running' || status === 'paused' ? shown : status === 'complete' ? "Time's up" : 'Focus';
+    updateTab(status, shown, done);
     syncPopout();
   }
+
+  // ---- The browser tab (Val 2026-11-24): discreet in an open office ----
+  // The title shows only the time, never the task. The icon becomes a ring that empties as
+  // time runs down. When time's up while you're on another tab or the window is minimised,
+  // the title and icon gently alternate until you come back.
+  const tabIcon = document.querySelector('link[rel="icon"]');
+  const MUG_ICON = tabIcon?.getAttribute('href') || '';
+  const svgIcon = (body) => `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">${body}</svg>`)}`;
+  const UP_ICON = svgIcon('<g fill="none" stroke="#c4553f" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" transform="translate(1.5 2) scale(1.2)"><path d="M5 10h11v6a4 4 0 0 1-4 4H9a4 4 0 0 1-4-4z"/><path d="M16 12h1.5a2.5 2.5 0 0 1 0 5H16"/><path d="M9 3.5c-.8.9-.8 2.1 0 3"/><path d="M12.5 3.5c-.8.9-.8 2.1 0 3"/></g>');
+  const ringIcon = (left, paused) => svgIcon(`<circle cx="16" cy="16" r="11" fill="none" stroke="#8a8279" stroke-opacity=".35" stroke-width="6"/>${left > 0 ? `<circle cx="16" cy="16" r="11" fill="none" stroke="${paused ? '#8a8279' : '#5b544d'}" stroke-width="6" pathLength="100" stroke-dasharray="${left} 100" transform="rotate(-90 16 16)"/>` : ''}`);
+  let flashTimer = null;
+  const setIcon = (href) => { if (tabIcon && href && tabIcon.getAttribute('href') !== href) tabIcon.setAttribute('href', href); };
+  function stopFlash() {
+    if (!flashTimer) return;
+    clearInterval(flashTimer);
+    flashTimer = null;
+  }
+  function updateTab(status, shown, done) {
+    if (status === 'complete' && document.hidden) {
+      if (flashTimer) return;
+      let on = false;
+      const tick = () => { on = !on; document.title = on ? "Time's up" : 'Focus'; setIcon(on ? UP_ICON : MUG_ICON); };
+      tick();
+      flashTimer = setInterval(tick, 1000);
+      return;
+    }
+    stopFlash();
+    if (status === 'running' || status === 'paused') {
+      document.title = status === 'paused' ? `${shown} · paused` : shown;
+      setIcon(ringIcon(Math.round((1 - done) * 48) / 48 * 100, status === 'paused'));
+    } else {
+      document.title = status === 'complete' ? "Time's up" : 'Focus';
+      setIcon(MUG_ICON);
+    }
+  }
+  document.addEventListener('visibilitychange', () => refreshClock());
   new MutationObserver(refreshClock).observe(timeEl, { childList: true, characterData: true, subtree: true });
 
   // ---- Typing suggestions (replace "Choose a previous task", Val 2026-11-18) ----
@@ -143,7 +180,7 @@
   }, true);
   window.addEventListener('keydown', (event) => {
     if (event.code !== 'Space' || !needsTask() || document.body.classList.contains('mini')) return;
-    if (event.target?.closest?.('input, select, textarea, button, [role="button"]')) return;
+    if (event.target?.closest?.('input, select, textarea, button, [role="button"], [contenteditable="true"]')) return;
     event.stopImmediatePropagation();
     event.preventDefault();
     askForTask();
@@ -183,7 +220,7 @@
   // ---- Note card: after time's up or Done (Val 2026-11-18) ----
   // It opens with the notes jotted while the timer ran, ready to tidy or add to.
   let noteFor = null;
-  const noteText = $('#note-text');
+  const noteText = notes.makeEditor($('#note-text'));
 
   function openNote(session, timeUp) {
     const jotted = readDraft().trim();
@@ -243,7 +280,7 @@
   // next session logged. The same box moves into the pop-out window.
   const DRAFT_KEY = 'pomopal.web.liveNotes';
   const liveNotes = $('#live-notes');
-  const liveInput = $('#live-note');
+  const liveInput = notes.makeEditor($('#live-note'));
 
   function readDraft() {
     try {
@@ -291,8 +328,7 @@
     if (event.metaKey || event.ctrlKey || event.altKey || event.target?.closest?.('input, textarea, select, [contenteditable="true"]')) return;
     if (!target) return;
     event.preventDefault();
-    target.focus();
-    target.setSelectionRange(target.value.length, target.value.length);
+    notes.caretToEnd(target);
   }
   document.addEventListener('keydown', (event) => {
     if (document.body.classList.contains('mini')) return; // the box is in the pop-out
@@ -352,7 +388,9 @@
 
   function noteEditor(session) {
     const box = el('div', { class: 'note-edit' });
-    const area = el('textarea', { 'aria-label': `Note for ${session.activity}`, placeholder: 'Add a note' });
+    const area = el('div', { 'aria-label': `Note for ${session.activity}`, 'data-placeholder': 'Add a note' });
+    box.append(area);
+    notes.makeEditor(area);
     area.value = session.note || '';
     const done = (save) => {
       if (save) {
@@ -368,22 +406,33 @@
     });
     const actions = el('div', { class: 'links' });
     actions.append(link('Cancel', () => done(false)), link('Save', () => done(true), 'strong'));
-    box.append(area, actions);
-    setTimeout(() => { area.focus(); area.setSelectionRange(area.value.length, area.value.length); }, 0);
+    box.append(actions);
+    setTimeout(() => notes.caretToEnd(area), 0);
     return box;
   }
 
-  // A note with its web links clickable (they open in a new tab).
+  // A note as formatted (bold, underline, bullets), with its web links clickable (they open
+  // in a new tab).
   function noteWithLinks(text) {
-    const span = el('span', { class: 'note' });
-    let rest = String(text);
-    log.linksIn(rest).forEach((url) => {
-      const at = rest.indexOf(url);
-      span.append(rest.slice(0, at), el('a', { href: url, target: '_blank', rel: 'noopener noreferrer' }, url));
-      rest = rest.slice(at + url.length);
+    const box = el('div', { class: 'note' });
+    box.innerHTML = log.noteToHtml(text); // built from escaped text: only b, u, ul, li, div, br
+    const walker = document.createTreeWalker(box, NodeFilter.SHOW_TEXT);
+    const texts = [];
+    while (walker.nextNode()) texts.push(walker.currentNode);
+    texts.forEach((node) => {
+      const urls = log.linksIn(node.textContent);
+      if (!urls.length) return;
+      const parts = [];
+      let rest = node.textContent;
+      urls.forEach((url) => {
+        const at = rest.indexOf(url);
+        parts.push(rest.slice(0, at), el('a', { href: url, target: '_blank', rel: 'noopener noreferrer' }, url));
+        rest = rest.slice(at + url.length);
+      });
+      parts.push(rest);
+      node.replaceWith(...parts.filter((p) => p !== ''));
     });
-    span.append(rest);
-    return span;
+    return box;
   }
 
   // ---- Import the Mac app's log (or a downloaded spreadsheet) (Val 2026-11-23) ----
@@ -609,7 +658,7 @@
       }
     } catch { /* the browser said no: drag the window taller instead */ }
     syncPopout();
-    if (popout.notesOpen) setTimeout(() => { liveInput.focus(); liveInput.setSelectionRange(liveInput.value.length, liveInput.value.length); }, 0);
+    if (popout.notesOpen) setTimeout(() => notes.caretToEnd(liveInput), 0);
   }
 
   function syncPopout() {
@@ -690,7 +739,7 @@
     // N in the pop-out opens the notes (or jumps into them when they're showing).
     doc.addEventListener('keydown', (event) => {
       if (popout.notesOpen) { notesKey(event, liveInput); return; }
-      if ((event.key === 'n' || event.key === 'N') && !event.metaKey && !event.ctrlKey && !event.altKey && !event.target?.closest?.('input, textarea')) {
+      if ((event.key === 'n' || event.key === 'N') && !event.metaKey && !event.ctrlKey && !event.altKey && !event.target?.closest?.('input, textarea, [contenteditable="true"]')) {
         event.preventDefault();
         toggleNotes();
       }
