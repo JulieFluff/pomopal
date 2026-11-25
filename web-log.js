@@ -383,6 +383,13 @@
         return list.length;
       },
       clear: () => storage.removeItem(STORAGE_KEY),
+      // On sign-out: removes only sessions already saved online (they stay safe there);
+      // sessions not yet saved online are kept, so nothing is ever lost. Returns how many were kept.
+      clearSynced() {
+        const kept = read().filter((s) => !s.synced);
+        if (kept.length) write(kept); else storage.removeItem(STORAGE_KEY);
+        return kept.length;
+      },
     };
   }
 

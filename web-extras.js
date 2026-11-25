@@ -825,9 +825,12 @@
       onlineLinks.replaceChildren(link('Sign out everywhere', signOutEverywhere));
       return;
     }
+    const kept = s.keptUnsaved
+      ? ` ${s.keptUnsaved} ${s.keptUnsaved === 1 ? 'session' : 'sessions'} not yet saved online ${s.keptUnsaved === 1 ? 'is' : 'are'} kept here and will save when you log in.`
+      : '';
     onlineLine.textContent = s.signedOutReason === 'elsewhere'
-      ? 'Signed out from another device. This browser\'s copy of the log was removed.'
-      : s.signedOutReason === 'you' ? 'Signed out on every device.' : 'Online saving is off on this browser.';
+      ? `Signed out from another device. Sessions saved online were removed from this browser.${kept}`
+      : s.signedOutReason === 'you' ? `Signed out on every device.${kept}` : 'Online saving is off on this browser.';
     onlineLinks.replaceChildren(link(form.hidden ? 'Log in to save online' : 'Cancel', () => {
       form.hidden = !form.hidden;
       formNote.textContent = '';

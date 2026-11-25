@@ -4,7 +4,8 @@
 //   Supabase only ever stores scrambled data. The key never leaves the device.
 // - Sessions upload when they finish; each device fetches the others' sessions.
 // - "Sign out everywhere" ends every device's login; a device that finds its login ended
-//   wipes its key and its copy of the log.
+//   wipes its key and its copy of the sessions already saved online. Sessions not yet
+//   saved online are always kept on the device (they upload at the next login).
 (function initWebSync(globalScope) {
   const AUTH_KEY = 'pomopal.web.auth';
   const LOCK_KEY = 'pomopal.web.key';
@@ -42,7 +43,7 @@
   function createSync({ config = {}, storage, store, fetch, subtle, randomBytes, now = () => Date.now(), onChange = () => {} }) {
     const url = String(config.url || '').replace(/\/+$/, '');
     const apikey = String(config.anonKey || '');
-    const status = { configured: Boolean(url && apikey), signedIn: false, email: '', lastSync: null, error: '', signedOutReason: '' };
+    const status = { configured: Boolean(url && apikey), signedIn: false, email: '', lastSync: null, error: '', signedOutReason: '', keptUnsaved: 0 };
     let busy = null;
 
     const readAuth = () => { try { return JSON.parse(storage.getItem(AUTH_KEY) || 'null'); } catch { return null; } };
@@ -77,7 +78,11 @@
       if (!force && auth.expires_at - now() > 60000) return auth.access_token;
       const r = await call('/auth/v1/token?grant_type=refresh_token', { method: 'POST', body: { refresh_token: auth.refresh_token } });
       if (r.ok) { saveTokens(r.json, auth.email); return r.json.access_token; }
-      if (r.status >= 400 && r.status < 500) throw new AuthEnded('login ended');
+      // Another tab of PomoPal may have renewed the login a moment ago: use its new token.
+      const latest = readAuth();
+      if (latest?.refresh_token && latest.refresh_token !== auth.refresh_token) return latest.access_token;
+      // Only a refused login ends it; "too many requests" just means try again later.
+      if ([400, 401, 403].includes(r.status)) throw new AuthEnded('login ended');
       throw new Error(`Supabase is not answering (${r.status})`);
     }
 
@@ -91,7 +96,7 @@
     function wipe(reason) {
       storage.removeItem(AUTH_KEY);
       storage.removeItem(LOCK_KEY);
-      store.clear();
+      status.keptUnsaved = store.clearSynced();
       status.signedOutReason = reason;
       status.lastSync = null;
       changed();
@@ -151,6 +156,7 @@
       saveTokens(r.json, cleanEmail);
       storage.setItem(LOCK_KEY, await deriveLock(subtle, password, cleanEmail));
       status.signedOutReason = '';
+      status.keptUnsaved = 0;
       changed();
       await syncNow();
     }
