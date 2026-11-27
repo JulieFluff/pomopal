@@ -242,7 +242,7 @@
     });
     return editor;
   }
-  const tomorrow = linkable(notes.makeEditor($('#tomorrow')));
+  const tomorrow = linkable(notes.makeEditor($('#tomorrow'), { richPaste: true }));
 
   // Screenshots: the lines ![screenshot](pomopal-image:<id>) show as the picture.
   function imageBlock(id) {
@@ -319,7 +319,7 @@
     const area = el('div', { 'data-placeholder': 'Notes, decisions, links… paste a screenshot here' });
     body.append(area);
     card.append(head, preview, body);
-    const editor = linkable(notes.makeEditor(area));
+    const editor = linkable(notes.makeEditor(area, { richPaste: true }));
     editor.value = entry.text;
     showImages(editor);
     linkify(editor);

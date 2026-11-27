@@ -605,10 +605,29 @@
   // driving them exactly as in the Mac app's mini mode.
   const popout = { win: null, moved: [], linksKey: '', notesOpen: false, shortHeight: 0 };
   const exitMini = () => { if (document.body.classList.contains('mini')) $('#expand-toggle').click(); };
-  $('#bring-back').addEventListener('click', exitMini);
+
+  // "Bring it back" (Val 2026-11-27: it never worked): puts the timer back on this page itself,
+  // closes the pop-out if it's still there, then leaves pop-out mode; each step on its own, so
+  // a pop-out the browser already closed can't stop the others.
+  function bringBack() {
+    const { win } = popout;
+    try { restoreFromPopout(); } catch { /* keep going */ }
+    try { win?.close?.(); } catch { /* already gone */ }
+    try { exitMini(); } catch { /* keep going */ }
+    if (document.body.classList.contains('mini')) document.body.classList.remove('mini');
+  }
+  $('#bring-back').addEventListener('click', bringBack);
+  // A pop-out the browser closed without telling this page (another picture-in-picture, a
+  // sleeping tab): noticed within a second, or when this tab is looked at again.
+  const checkPopout = () => { if (popout.win && popout.win.closed) bringBack(); };
+  setInterval(checkPopout, 1000);
+  document.addEventListener('visibilitychange', checkPopout);
+  window.addEventListener('focus', checkPopout);
 
   function restoreFromPopout() {
-    popout.moved.forEach(({ node, marker }) => { marker.replaceWith(node); });
+    popout.moved.forEach(({ node, marker }) => {
+      try { if (marker.isConnected) marker.replaceWith(node); } catch { /* the next one still goes back */ }
+    });
     popout.moved = [];
     popout.win = null;
     popout.linksKey = '';

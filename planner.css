@@ -34,6 +34,8 @@ body.planner-page { min-height: 100vh; }
 
 .day .rich { width: 100%; min-height: 160px; background: var(--field); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; font-size: 14px; line-height: 1.5; }
 #tomorrow.rich { min-height: 80px; }
+/* B U • stays at the top of the window while writing a long note (Val 2026-11-27). */
+.day .rich-tools { position: sticky; top: 0; z-index: 2; background: var(--page); margin: 0; padding: 6px 0; }
 
 /* Journal entries: newest open, earlier ones a one-line preview */
 .label-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }

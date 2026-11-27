@@ -106,7 +106,61 @@
   }
 
   // Turns a contenteditable element into a notes editor, with its B U • row before it.
-  function makeEditor(node, { tools = true } = {}) {
+  // Pasted formatting (Planner only, Val 2026-11-27): the clipboard's HTML is read in an inert
+  // document and reduced to what a note can hold (bold, underline, bullets, lines), then shown
+  // from that note text, so no colours, fonts, scripts or pictures from elsewhere get in.
+  const BULLET_MARK = /^(\s*)[•·▪◦‣‒–](\s|\u00a0)+/;
+  function pastedNote(html, doc) {
+    const view = doc.defaultView || globalScope;
+    if (!html || typeof view.DOMParser !== 'function') return null;
+    const parsed = new view.DOMParser().parseFromString(html, 'text/html');
+    const body = parsed.body;
+    if (!body) return null;
+    body.querySelectorAll('style, script, title, meta, link, template, noscript').forEach((n) => n.remove());
+    body.querySelectorAll('h1, h2, h3, h4, h5, h6, th').forEach((h) => { h.style.fontWeight = 'bold'; });
+    // Until tables come (v17): each row is a line, its cells split by " · ".
+    body.querySelectorAll('tr').forEach((row) => {
+      const line = parsed.createElement('div');
+      [...row.children].forEach((cell, i) => {
+        if (i) line.append(' · ');
+        const span = parsed.createElement('span');
+        if (cell.tagName === 'TH') span.style.fontWeight = 'bold';
+        span.append(...cell.childNodes);
+        line.append(span);
+      });
+      row.closest('table')?.before(line);
+    });
+    body.querySelectorAll('table').forEach((t) => t.remove());
+    const text = htmlToNote(body)
+      .split('\n')
+      .map((l) => l.replace(BULLET_MARK, '- '))
+      .join('\n')
+      .replace(/^\n+/, '');
+    return text.trim() ? text : null;
+  }
+
+  function insertHtml(node, html) {
+    const doc = node.ownerDocument;
+    let done = false;
+    try { done = doc.execCommand('insertHTML', false, html); } catch { done = false; }
+    if (done) return;
+    const selection = doc.getSelection?.();
+    if (!selection || !selection.rangeCount || !node.contains(selection.anchorNode)) caretToEnd(node);
+    const sel = doc.getSelection?.();
+    if (!sel || !sel.rangeCount) { node.insertAdjacentHTML('beforeend', html); }
+    else {
+      const range = sel.getRangeAt(0);
+      range.deleteContents();
+      const holder = doc.createElement('template');
+      holder.innerHTML = html;
+      const last = holder.content.lastChild;
+      range.insertNode(holder.content);
+      if (last) { range.setStartAfter(last); range.collapse(true); sel.removeAllRanges(); sel.addRange(range); }
+    }
+    node.dispatchEvent(new (doc.defaultView || globalScope).Event('input', { bubbles: true }));
+  }
+
+  function makeEditor(node, { tools = true, richPaste = false } = {}) {
     const log = globalScope.PomoWebLog;
     const doc = node.ownerDocument;
     node.setAttribute('contenteditable', 'true');
@@ -170,10 +224,22 @@
         run(node, 'insertUnorderedList');
       }
     });
-    // Pasted text comes in as plain text (a note keeps its own formatting only).
+    // Pasted text comes in as plain text (a note keeps its own formatting only), or in the
+    // Planner with its bold, underline and bullets kept (pastedNote above).
     node.addEventListener('paste', (event) => {
       const text = event.clipboardData?.getData('text/plain');
       event.preventDefault();
+      if (richPaste) {
+        let note = null;
+        try { note = pastedNote(event.clipboardData?.getData('text/html'), node.ownerDocument); } catch { note = null; }
+        if (note) {
+          const html = log.noteToHtml(note);
+          const single = !note.includes('\n') && /^<div>[\s\S]*<\/div>$/.test(html) && html.indexOf('<div>', 1) === -1;
+          insertHtml(node, single ? html.slice(5, -6) : html);
+          update();
+          return;
+        }
+      }
       if (!text) return;
       try { node.ownerDocument.execCommand('insertText', false, text); } catch { /* ignore */ }
     });
@@ -182,7 +248,7 @@
     return node;
   }
 
-  const exportsObject = { makeEditor, htmlToNote, caretToEnd };
+  const exportsObject = { makeEditor, htmlToNote, caretToEnd, pastedNote };
   if (typeof module !== 'undefined' && module.exports) module.exports = exportsObject;
   globalScope.PomoNotes = exportsObject;
 })(typeof window !== 'undefined' ? window : globalThis);
