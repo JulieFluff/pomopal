@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self'">
+  <title>Planner</title><link rel="icon" href="assets/icons/mug.svg"><link rel="stylesheet" href="web.css?v=v13"><link rel="stylesheet" href="planner.css?v=v13">
+</head>
+<!-- PomoPal Planner (Val 2026-11-27): one page per day. Planner notes stay in this browser
+     (never online); the day's timer sessions show here from the timer's log. -->
+<body class="web planner-page">
+<div class="planner">
+  <aside class="side" aria-label="Days">
+    <div class="day-nav">
+      <button id="prev-day" class="text-link" type="button" aria-label="Previous day">←</button>
+      <h1 id="day-title" class="day-title"></h1>
+      <button id="next-day" class="text-link" type="button" aria-label="Next day">→</button>
+    </div>
+    <button id="go-today" class="text-link" type="button">Today</button>
+    <p class="side-label">Recent days</p>
+    <ul id="recent-days" class="recent"></ul>
+  </aside>
+
+  <main class="day" aria-labelledby="day-title">
+    <p id="store-problem" class="store-problem" role="alert" hidden></p>
+
+    <section id="carried" class="carried" hidden>
+      <p class="label" id="carried-label"></p>
+      <div id="carried-text" class="note-view"></div>
+    </section>
+
+    <section class="block" aria-labelledby="frog-label">
+      <p class="label" id="frog-label">Frog</p>
+      <div class="item frog"><input id="frog-done" type="checkbox" aria-label="Frog done"><input id="frog-text" class="line" type="text" placeholder="The one thing to do first" aria-labelledby="frog-label"></div>
+    </section>
+
+    <section class="block" aria-labelledby="top3-label">
+      <p class="label" id="top3-label">Top 3</p>
+      <div id="top3"></div>
+    </section>
+
+    <section class="block" aria-labelledby="todos-label">
+      <p class="label" id="todos-label">Focus to-dos</p>
+      <div id="todos"></div>
+      <button id="add-todo" class="text-link" type="button">Add a to-do</button>
+    </section>
+
+    <section class="block wide" aria-labelledby="journal-label">
+      <p class="label" id="journal-label">Journal</p>
+      <div id="journal" aria-labelledby="journal-label" data-placeholder="Notes, decisions, links…"></div>
+    </section>
+
+    <section class="block wide" aria-labelledby="time-label">
+      <p class="label" id="time-label">Time</p>
+      <div id="time-list" class="time-list"></div>
+    </section>
+
+    <section class="block wide" aria-labelledby="tomorrow-label">
+      <p class="label" id="tomorrow-label">Focus for tomorrow</p>
+      <div id="tomorrow" aria-labelledby="tomorrow-label" data-placeholder="What to pick up next"></div>
+    </section>
+
+    <p id="save-state" class="save-state" aria-live="polite"></p>
+  </main>
+</div>
+<script src="web-log.js?v=v13"></script><script src="web-notes.js?v=v13"></script><script src="web-planner.js?v=v13"></script>
+</body></html>

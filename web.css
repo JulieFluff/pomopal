@@ -52,6 +52,7 @@ body.timer-complete .mug-button .steam.s2, .note-card.up .steam.s2 { animation-d
 /* Quiet text links */
 .text-link { font-size: 13px; color: var(--muted); padding: 4px 2px; }
 .text-link:hover:not(:disabled) { color: var(--ink); }
+a.text-link { text-decoration: none; }
 .text-link.strong { color: var(--ink); font-weight: 600; }
 .text-link:disabled { opacity: .45; }
 .links { display: flex; justify-content: center; gap: 22px; }

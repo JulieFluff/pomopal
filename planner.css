@@ -1,0 +1,59 @@
+/* PomoPal Planner (Val 2026-11-27): wide on a big screen, one column in a narrow window.
+   Quiet for an open office: same warm greys as the timer, small labels, no bright colour. */
+body.planner-page { min-height: 100vh; }
+.planner { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 32px; max-width: 1080px; margin: 0 auto; padding: 28px 24px 48px; }
+
+.side { position: sticky; top: 24px; align-self: start; display: flex; flex-direction: column; gap: 6px; }
+.day-nav { display: flex; align-items: center; gap: 6px; }
+.day-nav .text-link { font-size: 16px; padding: 2px 6px; }
+.day-title { flex: 1; margin: 0; font-size: 17px; font-weight: 600; text-align: center; }
+.side-label, .label { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--tone); margin: 0 0 6px; }
+.side-label { margin-top: 18px; }
+.recent { list-style: none; margin: 0; padding: 0; }
+.recent .text-link { display: block; text-align: left; }
+.recent .text-link.on { color: var(--ink); font-weight: 600; }
+#go-today { align-self: center; }
+
+.day { min-width: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 22px 24px; align-content: start; }
+.day > .wide, .day > .carried, .day > .store-problem, .day > .save-state { grid-column: 1 / -1; }
+.block { min-width: 0; }
+
+.carried { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px 16px; }
+.store-problem { margin: 0; color: var(--red); font-size: 13px; }
+
+.item { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.item input[type="checkbox"] { width: 16px; height: 16px; flex: none; accent-color: var(--ink); margin: 0; }
+.item .line { flex: 1; min-width: 0; background: transparent; border: 0; border-bottom: 1px solid var(--line); padding: 6px 2px; font-size: 14px; }
+.item .line:focus { outline: none; border-bottom-color: var(--ink); }
+.item .line::placeholder { color: var(--muted); }
+.item.done .line { color: var(--muted); text-decoration: line-through; }
+.item .remove { font-size: 16px; padding: 0 4px; opacity: .6; }
+.item .remove:hover { opacity: 1; }
+
+.day .rich { width: 100%; min-height: 160px; background: var(--field); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; font-size: 14px; line-height: 1.5; }
+#tomorrow.rich { min-height: 80px; }
+.note-view { font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+.note-view ul { margin: 2px 0; padding-left: 20px; }
+.rich a, .note-view a { color: var(--ink); }
+
+.time-list .quiet, .total-line { font-size: 13px; color: var(--muted); margin: 0 0 8px; }
+.session { padding: 8px 0; border-top: 1px solid var(--line); }
+.session-head { display: flex; gap: 12px; align-items: baseline; margin: 0; font-size: 14px; }
+.session-head .t { color: var(--muted); font-variant-numeric: tabular-nums; flex: none; }
+.session-head .a { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.session-head .m { color: var(--muted); font-size: 12px; flex: none; }
+.session-note { margin: 4px 0 0 52px; color: var(--ink); font-size: 13px; }
+.save-state { margin: 0; font-size: 12px; color: var(--muted); min-height: 1em; }
+
+/* Medium window: Frog, Top 3 and to-dos stack. */
+@media (max-width: 900px) {
+  .day { grid-template-columns: minmax(0, 1fr); }
+}
+/* Narrow window (side by side with other work, or a phone): days on one line at the top. */
+@media (max-width: 640px) {
+  .planner { grid-template-columns: minmax(0, 1fr); gap: 16px; padding: 16px 16px 32px; }
+  .side { position: static; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+  .day-nav { flex: 1; }
+  .side-label, .recent { display: none; }
+  .session-note { margin-left: 0; }
+}

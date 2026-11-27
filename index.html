@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self' https://*.supabase.co">
-  <title>Focus</title><link rel="icon" href="assets/icons/mug.svg"><link rel="stylesheet" href="web.css?v=v12">
+  <title>Focus</title><link rel="icon" href="assets/icons/mug.svg"><link rel="stylesheet" href="web.css?v=v13">
 </head>
 <body class="web">
 <!-- Browser version (work look, locked design docs/PomoPal_work-look-mockup.html, Val 2026-11-18).
@@ -16,6 +16,7 @@
         <svg class="mug" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 10h11v6a4 4 0 0 1-4 4H9a4 4 0 0 1-4-4z"/><path d="M16 12h1.5a2.5 2.5 0 0 1 0 5H16"/><path class="steam" d="M9 3.5c-.8.9-.8 2.1 0 3"/><path class="steam s2" d="M12.5 3.5c-.8.9-.8 2.1 0 3"/></svg>
       </button>
       <nav class="tools" aria-label="Menu">
+        <a id="open-planner" class="text-link" href="planner.html" target="_blank" rel="noopener">Planner</a>
         <button id="open-log" class="text-link" type="button">Log</button>
         <button id="compact-toggle" class="icon-button popout-icon" type="button" aria-label="Pop out the timer" title="Pop out the timer"></button>
         <button id="mute-toggle" class="icon-button sound-icon" type="button" aria-label="Mute sounds" aria-pressed="false"></button>
@@ -68,10 +69,10 @@
 
   <p class="web-popped mini-only">The timer is in the pop-out window · <button id="bring-back" class="text-link" type="button">Bring it back</button></p>
   <!-- Version: the build script writes the build's version here (Val 2026-11-19). -->
-  <p id="app-version" class="app-version">v12 · 25 Nov 2026</p>
+  <p id="app-version" class="app-version">v13 · 27 Nov 2026</p>
 </main>
 <dialog id="settings-dialog" aria-label="Settings">
   <form method="dialog"><select id="finish-sound" aria-label="Finish sound"><option value="random">Surprise me</option><option value="bright">Bright</option><option value="gentle">Gentle</option><option value="sparkle">Sparkle</option></select></form>
 </dialog>
-<script src="renderer/timer-model.js?v=v12"></script><script src="renderer/finish-sounds.js?v=v12"></script><script src="renderer/preferences.js?v=v12"></script><script src="web-log.js?v=v12"></script><script src="web-notes.js?v=v12"></script><script src="web-bridge.js?v=v12"></script><script src="renderer/app.js?v=v12"></script><script src="web-config.js?v=v12"></script><script src="web-sync.js?v=v12"></script><script src="web-extras.js?v=v12"></script>
+<script src="renderer/timer-model.js?v=v13"></script><script src="renderer/finish-sounds.js?v=v13"></script><script src="renderer/preferences.js?v=v13"></script><script src="web-log.js?v=v13"></script><script src="web-notes.js?v=v13"></script><script src="web-bridge.js?v=v13"></script><script src="renderer/app.js?v=v13"></script><script src="web-config.js?v=v13"></script><script src="web-sync.js?v=v13"></script><script src="web-extras.js?v=v13"></script>
 </body></html>
