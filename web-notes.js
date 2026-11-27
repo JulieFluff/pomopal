@@ -49,6 +49,12 @@
         }
         if (child.nodeType !== 1) return;
         if (child.tagName === 'BR') { end(); return; }
+        // A Planner screenshot is its own line: ![screenshot](pomopal-image:<id>).
+        if (child.tagName === 'IMG') {
+          const id = child.getAttribute('data-img');
+          if (id) { if (line !== null) end(); add(`![screenshot](pomopal-image:${id})`); end(); }
+          return;
+        }
         const block = BLOCKS.has(child.tagName);
         if (block && line !== null) end();
         if (child.tagName === 'LI') add('- ');
